@@ -1,6 +1,6 @@
 {
   "name": "yaml-to-gantt",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Visualize a YAML roadmap as an interactive Gantt chart",
   "license": "MIT",
