@@ -1,0 +1,30 @@
+projects:
+  Product Launch:
+    - name: Market research
+      start: 2025-07-01
+      end: 2025-07-11
+      assignees:
+        - Alice
+    - name: Landing page
+      start: 2025-07-07
+      end: 2025-07-18
+      assignees:
+        - Bob
+        - Carol
+    - name: Beta release
+      start: 2025-07-21
+      end: 2025-07-25
+      assignees: []
+
+  Engineering:
+    - name: API development
+      start: 2025-07-01
+      end: 2025-07-18
+      assignees:
+        - Dave
+    - name: Frontend integration
+      start: 2025-07-14
+      end: 2025-07-25
+      assignees:
+        - Carol
+        - Dave
