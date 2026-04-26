@@ -2,7 +2,7 @@
 
 Visualize a YAML roadmap as an interactive Gantt chart in your browser.
 
-![yaml-to-gantt screenshot](assets/screenshot-dark.png)
+![yaml-to-gantt demo](https://raw.githubusercontent.com/poccio/yaml-to-gantt/main/assets/gif/demo.gif)
 
 ## Quick Start
 
