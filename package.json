@@ -4,6 +4,10 @@
   "type": "module",
   "description": "Visualize a YAML roadmap as an interactive Gantt chart",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/poccio/yaml-to-gantt"
+  },
   "bin": {
     "yaml-to-gantt": "./bin/cli.js"
   },
