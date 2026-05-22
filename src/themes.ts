@@ -1,4 +1,30 @@
-export const DARK = {
+export interface Theme {
+  bg: string;
+  surface: string;
+  raised: string;
+  border: string;
+  borderInner: string;
+  borderSubtle: string;
+  borderHover: string;
+  text: string;
+  textMuted: string;
+  textFaint: string;
+  taskText: string;
+  accent: string;
+  headerBg: string;
+  monthLabel: string;
+  dayMonday: string;
+  dayWeekend: string;
+  weekBandAlpha: string;
+  weekLineAlpha: string;
+  chipBg: string;
+  chipBorder: string;
+  chipText: string;
+  error: string;
+  colorScheme: 'dark' | 'light';
+}
+
+export const DARK: Theme = {
   bg: '#0e1117', surface: '#161a22', raised: '#1d2130',
   border: '#252d3d', borderInner: '#1c2336', borderSubtle: '#1a1f2c', borderHover: '#4a5e80',
   text: '#ccd6f0', textMuted: '#5a6e8a', textFaint: '#3d4e68',
@@ -9,7 +35,7 @@ export const DARK = {
   chipText: '#7a9ab8', error: '#f87171', colorScheme: 'dark',
 };
 
-export const LIGHT = {
+export const LIGHT: Theme = {
   bg: '#f0f2f5', surface: '#ffffff', raised: '#f7f8fa',
   border: '#e2e5eb', borderInner: '#eaecf2', borderSubtle: '#f0f2f5', borderHover: '#9aaabb',
   text: '#1a2133', textMuted: '#6b7a99', textFaint: '#b0bdd0',

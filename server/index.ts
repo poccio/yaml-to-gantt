@@ -6,15 +6,19 @@ import sirv from 'sirv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export function start(yamlPath, { port = 3847 } = {}) {
+interface StartOptions {
+  port?: number;
+}
+
+export function start(yamlPath: string, { port = 3847 }: StartOptions = {}): Promise<http.Server> {
   const distDir = path.join(__dirname, '..', 'dist');
   const serveStatic = sirv(distDir, { single: true });
 
-  const clients = new Set();
-  let debounceTimer = null;
+  const clients = new Set<http.ServerResponse>();
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   fs.watch(yamlPath, () => {
-    clearTimeout(debounceTimer);
+    if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       for (const res of clients) {
         res.write('data: reload\n\n');
@@ -47,7 +51,7 @@ export function start(yamlPath, { port = 3847 } = {}) {
 
   return new Promise((resolve, reject) => {
     let currentPort = port;
-    server.on('error', (err) => {
+    server.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
         currentPort++;
         server.listen(currentPort);

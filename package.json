@@ -18,7 +18,9 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && pnpm build:server",
+    "build:server": "tsc -p tsconfig.server.json && cp .build-server/server/index.js server/ && cp .build-server/bin/cli.js bin/ && rm -rf .build-server",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
     "prepublishOnly": "pnpm build"
   },
@@ -27,11 +29,16 @@
   },
   "devDependencies": {
     "@preact/compat": "^17.1.2",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.4",
     "js-yaml": "^4.1.0",
     "preact": "^10.25.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "typescript": "^6.0.3",
     "vite": "^6.3.1",
     "vitest": "^3.1.1"
   }

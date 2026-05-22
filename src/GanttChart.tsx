@@ -1,4 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'preact/compat';
+import type { JSX } from 'preact';
+import type { Task } from './parseYaml';
+import type { Theme } from './themes';
 
 const DAY_W = 40;
 const LABEL_W = 280;
@@ -14,7 +17,7 @@ const PROJECT_COLORS = [
 
 const ACCENT = '#4f8ef7';
 
-function hexRgb(hex) {
+function hexRgb(hex: string): string {
   return [
     parseInt(hex.slice(1, 3), 16),
     parseInt(hex.slice(3, 5), 16),
@@ -22,17 +25,42 @@ function hexRgb(hex) {
   ].join(',');
 }
 
-function parseDay(s) {
+function parseDay(s: string): Date {
   return new Date(s + 'T00:00:00');
 }
 
-function daysBetween(a, b) {
-  return Math.round((b - a) / 86_400_000);
+function daysBetween(a: Date, b: Date): number {
+  return Math.round((b.getTime() - a.getTime()) / 86_400_000);
 }
 
-export default function GanttChart({ tasks, selectedAssignees, theme }) { // ← theme
-  const containerRef = useRef(null);
-  const [hoverOffset, setHoverOffset] = useState(null);
+interface Project {
+  name: string;
+  color: string;
+  tasks: Task[];
+}
+
+interface MonthInfo {
+  label: string;
+  offset: number;
+  width: number;
+}
+
+interface DayTick {
+  offset: number;
+  dayNum: number;
+  isMonday: boolean;
+  isWeekend: boolean;
+}
+
+interface GanttChartProps {
+  tasks: Task[];
+  selectedAssignees: Set<string> | null;
+  theme: Theme;
+}
+
+export default function GanttChart({ tasks, selectedAssignees, theme }: GanttChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [hoverOffset, setHoverOffset] = useState<number | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
   useEffect(() => {
@@ -52,8 +80,8 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
 
   const { rangeStart, totalDays, months, firstMondayOffset } = useMemo(() => {
     const allDates = tasks.flatMap(t => [parseDay(t.start), parseDay(t.end)]);
-    const minDate = new Date(Math.min(...allDates));
-    const maxDate = new Date(Math.max(...allDates));
+    const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
+    const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
 
     const rangeStart = new Date(minDate);
     rangeStart.setDate(rangeStart.getDate() - RANGE_PAD);
@@ -68,8 +96,8 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
     while (firstMonday.getDay() !== 1) firstMonday.setDate(firstMonday.getDate() + 1);
     const firstMondayOffset = daysBetween(rangeStart, firstMonday);
 
-    const months = [];
-    let cursor = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
+    const months: MonthInfo[] = [];
+    const cursor = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
     while (cursor <= rangeEnd) {
       const mStart = new Date(Math.max(cursor.getTime(), rangeStart.getTime()));
       const nextMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
@@ -79,14 +107,14 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
         offset: daysBetween(rangeStart, mStart),
         width: daysBetween(mStart, mEnd) + 1,
       });
-      cursor = nextMonth;
+      cursor.setTime(nextMonth.getTime());
     }
 
     return { rangeStart, totalDays, months, firstMondayOffset };
   }, [tasks]);
 
-  const dayTicks = useMemo(() => {
-    const ticks = [];
+  const dayTicks = useMemo((): DayTick[] => {
+    const ticks: DayTick[] = [];
     for (let off = 0; off < totalDays; off++) {
       const d = new Date(rangeStart.getTime() + off * 86_400_000);
       ticks.push({
@@ -106,7 +134,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
     return off >= 0 && off < totalDays ? off : null;
   }, [rangeStart, totalDays]);
 
-  const projects = useMemo(() => {
+  const projects = useMemo((): Project[] => {
     const names = [...new Set(tasks.map(t => t.project))];
     return names.map(name => ({
       name,
@@ -115,7 +143,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
     }));
   }, [tasks, colorMap]);
 
-  const isVisible = (task) =>
+  const isVisible = (task: Task): boolean =>
     !selectedAssignees ||
     task.assignees.some(a => selectedAssignees.has(a));
 
@@ -124,7 +152,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
     ? Math.max(DAY_W, (containerWidth - LABEL_W) / totalDays)
     : DAY_W;
 
-  // ← theme: weekLineAlpha and weekBandAlpha replace hardcoded rgba values
   const weekGrid = {
     backgroundImage: `
       repeating-linear-gradient(
@@ -148,7 +175,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
     `,
   };
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = (e: JSX.TargetedMouseEvent<HTMLDivElement>) => {
     const container = containerRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
@@ -163,7 +190,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
       .toLocaleString('en-US', { month: 'short', day: 'numeric' })
     : null;
 
-  const Crosshair = ({ height }) => hoverOffset === null ? null : (
+  const Crosshair = ({ height }: { height: number }) => hoverOffset === null ? null : (
     <>
       <div style={{
         position: 'absolute', left: hoverOffset * effectiveDayW, top: 0,
@@ -180,7 +207,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
     </>
   );
 
-  const TodayLine = ({ height }) => todayOffset === null ? null : (
+  const TodayLine = ({ height }: { height: number }) => todayOffset === null ? null : (
     <div style={{
       position: 'absolute', left: todayOffset * effectiveDayW, top: 0,
       width: 2, height,
@@ -190,14 +217,14 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
     }} />
   );
 
-  const tlCell = (extra = {}) => ({
+  const tlCell = (extra: JSX.CSSProperties = {}): JSX.CSSProperties => ({
     flex: 1,
     minWidth: timelineMinW,
     position: 'relative',
     ...extra,
   });
 
-  const labelCell = (extra = {}) => ({
+  const labelCell = (extra: JSX.CSSProperties = {}): JSX.CSSProperties => ({
     width: LABEL_W,
     flexShrink: 0,
     position: 'sticky',
@@ -209,41 +236,41 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
   return (
     <div
       ref={containerRef}
-      style={{ flex: 1, overflow: 'auto', background: theme.surface }} // ← theme
+      style={{ flex: 1, overflow: 'auto', background: theme.surface }}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setHoverOffset(null)}
     >
 
-      {/* ── Sticky header ── */}
+      {/* Sticky header */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 30,
         display: 'flex', height: HDR_H,
-        background: `linear-gradient(180deg, ${theme.headerBg} 0%, ${theme.surface} 100%)`, // ← theme
-        borderBottom: `1px solid ${theme.border}`, // ← theme
+        background: `linear-gradient(180deg, ${theme.headerBg} 0%, ${theme.surface} 100%)`,
+        borderBottom: `1px solid ${theme.border}`,
       }}>
         {/* Corner */}
         <div style={{
           ...labelCell(),
           zIndex: 31,
-          background: `linear-gradient(180deg, ${theme.headerBg} 0%, ${theme.surface} 100%)`, // ← theme
-          borderRight: `1px solid ${theme.border}`, // ← theme
+          background: `linear-gradient(180deg, ${theme.headerBg} 0%, ${theme.surface} 100%)`,
+          borderRight: `1px solid ${theme.border}`,
         }} />
 
         {/* Month + day header */}
         <div style={tlCell()}>
 
           {/* Month row */}
-          <div style={{ position: 'relative', height: 30, borderBottom: `1px solid ${theme.borderInner}` }}> {/* ← theme */}
+          <div style={{ position: 'relative', height: 30, borderBottom: `1px solid ${theme.borderInner}` }}>
             {months.map((m, i) => (
               <div key={i} style={{
                 position: 'absolute',
                 left: m.offset * effectiveDayW, width: m.width * effectiveDayW, height: 30,
                 display: 'flex', alignItems: 'center', paddingLeft: 12,
                 fontSize: 13, fontWeight: 600, letterSpacing: '0.1em',
-                textTransform: 'uppercase', color: theme.monthLabel, // ← theme
+                textTransform: 'uppercase', color: theme.monthLabel,
                 fontFamily: "'JetBrains Mono', monospace",
                 overflow: 'hidden',
-                borderLeft: i > 0 ? `1px solid ${theme.borderInner}` : 'none', // ← theme
+                borderLeft: i > 0 ? `1px solid ${theme.borderInner}` : 'none',
               }}>
                 {m.label}
               </div>
@@ -259,7 +286,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 13,
                 fontFamily: "'JetBrains Mono', monospace",
-                // ← theme: weekend/monday/regular day colors
                 color: d.isWeekend ? theme.dayWeekend : d.isMonday ? theme.dayMonday : theme.monthLabel,
                 fontWeight: d.isMonday ? 600 : 400,
                 opacity: d.offset === hoverOffset ? 0 : 1,
@@ -283,7 +309,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
             {hoverDate && (
               <div style={{
                 position: 'absolute',
-                left: hoverOffset * effectiveDayW + effectiveDayW / 2,
+                left: hoverOffset! * effectiveDayW + effectiveDayW / 2,
                 top: '50%', transform: 'translate(-50%, -50%)',
                 background: ACCENT, color: '#ffffff',
                 fontSize: 13, lineHeight: 1,
@@ -312,26 +338,26 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
         </div>
       </div>
 
-      {/* ── Project sections ── */}
+      {/* Project sections */}
       {projects.map(proj => {
         const rgb = hexRgb(proj.color);
         const visibleTasks = proj.tasks.filter(isVisible);
         if (visibleTasks.length === 0) return null;
 
         return (
-          <React.Fragment key={proj.name}>
+          <div key={proj.name}>
 
             {/* Project header row */}
             <div style={{ display: 'flex', height: PROJ_H }}>
               <div style={{
                 ...labelCell({
-                  background: `linear-gradient(90deg, rgba(${rgb},0.06) 0%, ${theme.surface} 100%)`, // ← theme
+                  background: `linear-gradient(90deg, rgba(${rgb},0.06) 0%, ${theme.surface} 100%)`,
                   display: 'flex', alignItems: 'center',
                   paddingLeft: 16, paddingRight: 16,
                   borderLeft: `3px solid ${proj.color}`,
-                  borderRight: `1px solid ${theme.border}`, // ← theme
-                  borderTop: `1px solid ${theme.border}`, // ← theme
-                  borderBottom: `1px solid ${theme.border}`, // ← theme
+                  borderRight: `1px solid ${theme.border}`,
+                  borderTop: `1px solid ${theme.border}`,
+                  borderBottom: `1px solid ${theme.border}`,
                 }),
               }}>
                 <span style={{
@@ -345,8 +371,8 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
               </div>
               <div style={tlCell({
                 background: `rgba(${rgb},0.04)`,
-                borderTop: `1px solid ${theme.border}`, // ← theme
-                borderBottom: `1px solid ${theme.border}`, // ← theme
+                borderTop: `1px solid ${theme.border}`,
+                borderBottom: `1px solid ${theme.border}`,
                 ...weekGrid,
               })}>
                 <Crosshair height={PROJ_H} />
@@ -375,15 +401,15 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
                 <div key={task.name} style={{ display: 'flex', height: ROW_H }}>
                   <div style={{
                     ...labelCell({
-                      background: theme.surface, // ← theme
+                      background: theme.surface,
                       display: 'flex', alignItems: 'center',
                       paddingLeft: 22, paddingRight: 10,
-                      borderRight: `1px solid ${theme.borderInner}`, // ← theme
-                      borderBottom: `1px solid ${theme.borderSubtle}`, // ← theme
+                      borderRight: `1px solid ${theme.borderInner}`,
+                      borderBottom: `1px solid ${theme.borderSubtle}`,
                     }),
                   }}>
                     <span title={task.name} style={{
-                      fontSize: 15, color: theme.taskText, // ← theme
+                      fontSize: 15, color: theme.taskText,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       fontFamily: "'Plus Jakarta Sans', sans-serif",
                       fontWeight: 500,
@@ -393,7 +419,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
                   </div>
 
                   <div style={tlCell({
-                    borderBottom: `1px solid ${theme.borderSubtle}`, // ← theme
+                    borderBottom: `1px solid ${theme.borderSubtle}`,
                     ...weekGrid,
                   })}>
                     <Crosshair height={ROW_H} />
@@ -426,7 +452,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
                             fontSize: 13, padding: '3px 8px', borderRadius: 4,
                             fontFamily: "'JetBrains Mono', monospace",
                             letterSpacing: '0.02em', whiteSpace: 'nowrap',
-                            // ← theme: chipBg/chipText/chipBorder for unselected; project color for selected
                             background: isHl ? `rgba(${rgb},0.18)` : theme.chipBg,
                             color: isHl ? proj.color : theme.chipText,
                             border: `0.5px solid ${isHl ? `rgba(${rgb},0.4)` : theme.chipBorder}`,
@@ -440,7 +465,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }) { // ←
                 </div>
               );
             })}
-          </React.Fragment>
+          </div>
         );
       })}
 

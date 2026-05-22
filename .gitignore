@@ -4,6 +4,11 @@ node_modules/
 # production
 dist/
 
+# compiled server/cli (source is .ts, build emits .js)
+server/*.js
+bin/*.js
+.build-server/
+
 # vite
 .vite/
 

@@ -1,0 +1,11 @@
+projects:
+  ProductX:
+    - name: Design
+      start: 2026-05-01
+      end: 2026-05-14
+      assignees: [ Alice ]
+    - name: Development
+      start: 2026-05-12
+      end: 2026-05-30
+      assignees: [ Bob, Carol ]
+
