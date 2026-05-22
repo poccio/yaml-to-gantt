@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseYaml } from '../src/parseYaml.js';
+import { parseYaml } from '../src/parseYaml';
 
 const SINGLE_PROJECT_YAML = `
 projects:

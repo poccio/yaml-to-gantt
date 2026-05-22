@@ -1,30 +1,44 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { start } from '../server/index.js';
 
-function fetch(url) {
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distDir = path.join(__dirname, '..', 'dist');
+
+interface FetchResult {
+  status: number;
+  body: string;
+  headers: http.IncomingHttpHeaders;
+}
+
+function fetchUrl(url: string): Promise<FetchResult> {
   return new Promise((resolve, reject) => {
     http.get(url, (res) => {
       let body = '';
-      res.on('data', (chunk) => { body += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, body, headers: res.headers }));
+      res.on('data', (chunk: Buffer) => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode!, body, headers: res.headers }));
     }).on('error', reject);
   });
 }
 
 describe('server', () => {
-  let server;
-  let tmpFile;
+  let server: http.Server | undefined;
+  let tmpFile: string | undefined;
+
+  beforeAll(() => {
+    fs.mkdirSync(distDir, { recursive: true });
+  });
 
   afterEach(async () => {
-    if (server) await new Promise((r) => server.close(r));
+    if (server) await new Promise<void>((r) => server!.close(() => r()));
     if (tmpFile) try { fs.unlinkSync(tmpFile); } catch {}
   });
 
-  function createTmpYaml(content) {
+  function createTmpYaml(content: string): string {
     tmpFile = path.join(os.tmpdir(), `yaml-to-gantt-test-${Date.now()}.yaml`);
     fs.writeFileSync(tmpFile, content);
     return tmpFile;
@@ -33,10 +47,10 @@ describe('server', () => {
   it('serves YAML file at /api/yaml', async () => {
     const yamlContent = 'projects:\n  Test:\n    - name: T1\n      start: 2025-01-01\n      end: 2025-01-05\n      assignees: []\n';
     const filePath = createTmpYaml(yamlContent);
-    server = await start(filePath, { port: 0 });
-    const addr = server.address();
+    server = await start(filePath, { port: 0 }) as http.Server;
+    const addr = server.address() as { port: number };
 
-    const res = await fetch(`http://localhost:${addr.port}/api/yaml`);
+    const res = await fetchUrl(`http://localhost:${addr.port}/api/yaml`);
     expect(res.status).toBe(200);
     expect(res.body).toBe(yamlContent);
     expect(res.headers['content-type']).toBe('text/plain');
@@ -44,12 +58,12 @@ describe('server', () => {
 
   it('returns SSE headers at /api/events', async () => {
     const filePath = createTmpYaml('projects: {}');
-    server = await start(filePath, { port: 0 });
-    const addr = server.address();
+    server = await start(filePath, { port: 0 }) as http.Server;
+    const addr = server.address() as { port: number };
 
-    const res = await new Promise((resolve, reject) => {
+    const res = await new Promise<{ status: number; headers: http.IncomingHttpHeaders }>((resolve, reject) => {
       http.get(`http://localhost:${addr.port}/api/events`, (res) => {
-        resolve({ status: res.statusCode, headers: res.headers });
+        resolve({ status: res.statusCode!, headers: res.headers });
         res.destroy();
       }).on('error', reject);
     });
@@ -61,8 +75,8 @@ describe('server', () => {
 
   it('starts on a specific port', async () => {
     const filePath = createTmpYaml('projects: {}');
-    server = await start(filePath, { port: 0 });
-    const addr = server.address();
+    server = await start(filePath, { port: 0 }) as http.Server;
+    const addr = server.address() as { port: number };
     expect(typeof addr.port).toBe('number');
     expect(addr.port).toBeGreaterThan(0);
   });

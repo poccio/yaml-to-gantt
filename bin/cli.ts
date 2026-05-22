@@ -25,7 +25,7 @@ if (!existsSync(absPath)) {
 }
 
 const server = await start(absPath);
-const addr = server.address();
+const addr = server.address() as { port: number };
 const url = `http://localhost:${addr.port}?file=${encodeURIComponent(absPath)}`;
 
 console.log(`\n  yaml-to-gantt\n`);

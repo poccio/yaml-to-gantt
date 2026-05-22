@@ -1,9 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { parseYaml } from './parseYaml.js';
-import GanttChart from './GanttChart.jsx';
-import { DARK, LIGHT } from './themes.js';
+import { useState, useMemo, useEffect } from 'preact/compat';
+import type { JSX } from 'preact';
+import { parseYaml } from './parseYaml';
+import type { Task } from './parseYaml';
+import GanttChart from './GanttChart';
+import { DARK, LIGHT } from './themes';
+import type { Theme } from './themes';
 
-function getInitialTheme() {
+function getInitialTheme(): Theme {
   const stored = localStorage.getItem('theme');
   if (stored === 'light') return LIGHT;
   if (stored === 'dark') return DARK;
@@ -11,11 +14,11 @@ function getInitialTheme() {
 }
 
 export default function App() {
-  const [tasks, setTasks] = useState(null);
-  const [selectedAssignees, setSelectedAssignees] = useState(null);
-  const [error, setError] = useState(null);
-  const [theme, setTheme] = useState(getInitialTheme);
-  const [filename, setFilename] = useState(() => {
+  const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [selectedAssignees, setSelectedAssignees] = useState<Set<string> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [filename, setFilename] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('file') || null;
   });
@@ -31,14 +34,14 @@ export default function App() {
     document.documentElement.style.colorScheme = next.colorScheme;
   };
 
-  const loadYaml = (text, name) => {
+  const loadYaml = (text: string, name?: string) => {
     try {
       setTasks(parseYaml(text));
       setSelectedAssignees(null);
       setError(null);
       if (name) setFilename(name);
     } catch (err) {
-      setError(`Failed to parse YAML: ${err.message}`);
+      setError(`Failed to parse YAML: ${(err as Error).message}`);
     }
   };
 
@@ -70,7 +73,7 @@ export default function App() {
     setError(null);
   };
 
-  const toggleAssignee = (name) => {
+  const toggleAssignee = (name: string) => {
     setSelectedAssignees((prev) => {
       if (prev === null) return new Set([name]);
       const next = new Set(prev);
@@ -184,12 +187,12 @@ export default function App() {
                 marginLeft: 'auto',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = theme.text;
-                e.currentTarget.style.borderColor = theme.borderHover;
+                (e.currentTarget as HTMLButtonElement).style.color = theme.text;
+                (e.currentTarget as HTMLButtonElement).style.borderColor = theme.borderHover;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = theme.textMuted;
-                e.currentTarget.style.borderColor = theme.border;
+                (e.currentTarget as HTMLButtonElement).style.color = theme.textMuted;
+                (e.currentTarget as HTMLButtonElement).style.borderColor = theme.border;
               }}
             >
               New
@@ -208,8 +211,8 @@ export default function App() {
                 color: theme.textMuted,
                 transition: 'color 0.12s',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = theme.text; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = theme.textMuted; }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = theme.text; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = theme.textMuted; }}
             >
               {isDark ? '☀' : '🌙'}
             </button>
@@ -268,23 +271,28 @@ const GHOST_BARS = [
   { offset: 80,  barW: 90,  color: '#fbbf24' },
 ];
 
-function EmptyState({ onLoad, theme }) {
-  const [dragging, setDragging] = React.useState(false);
+interface EmptyStateProps {
+  onLoad: (text: string, name?: string) => void;
+  theme: Theme;
+}
 
-  const handleDrop = (e) => {
+function EmptyState({ onLoad, theme }: EmptyStateProps) {
+  const [dragging, setDragging] = useState(false);
+
+  const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    const file = e.dataTransfer.files[0];
+    const file = e.dataTransfer?.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => onLoad(ev.target.result, file.name.replace(/\.(yaml|yml)$/, ''));
+    reader.onload = (ev) => onLoad(ev.target!.result as string, file.name.replace(/\.(yaml|yml)$/, ''));
     reader.readAsText(file);
   };
 
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); }}
+      onDragLeave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setDragging(false); }}
       onDrop={handleDrop}
       style={{
         flex: 1,
@@ -337,8 +345,15 @@ function EmptyState({ onLoad, theme }) {
   );
 }
 
-function Pill({ active, onClick, children, theme }) {
-  const [hovered, setHovered] = React.useState(false);
+interface PillProps {
+  active: boolean;
+  onClick: () => void;
+  children: preact.ComponentChildren;
+  theme: Theme;
+}
+
+function Pill({ active, onClick, children, theme }: PillProps) {
+  const [hovered, setHovered] = useState(false);
   const isDark = theme.colorScheme === 'dark';
   const colors = isDark
     ? {
