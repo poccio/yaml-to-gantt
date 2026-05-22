@@ -1,9 +1,13 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { start } from '../server/index.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distDir = path.join(__dirname, '..', 'dist');
 
 interface FetchResult {
   status: number;
@@ -24,6 +28,10 @@ function fetchUrl(url: string): Promise<FetchResult> {
 describe('server', () => {
   let server: http.Server | undefined;
   let tmpFile: string | undefined;
+
+  beforeAll(() => {
+    fs.mkdirSync(distDir, { recursive: true });
+  });
 
   afterEach(async () => {
     if (server) await new Promise<void>((r) => server!.close(() => r()));
