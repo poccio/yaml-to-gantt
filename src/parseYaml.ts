@@ -6,6 +6,7 @@ export interface Task {
   start: string;
   end: string;
   assignees: string[];
+  description?: string;
 }
 
 interface YamlTaskItem {
@@ -13,6 +14,7 @@ interface YamlTaskItem {
   start: string | Date;
   end: string | Date;
   assignees?: string[];
+  description?: string;
 }
 
 interface YamlDocument {
@@ -33,6 +35,7 @@ export function parseYaml(text: string): Task[] {
         start: toDateStr(item.start),
         end: toDateStr(item.end),
         assignees: item.assignees ?? [],
+        description: item.description,
       });
     }
   }

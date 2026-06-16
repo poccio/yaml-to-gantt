@@ -76,6 +76,24 @@ projects:
     expect(tasks[0].assignees).toEqual([]);
   });
 
+  it('passes through an optional description verbatim', () => {
+    const yaml = `
+projects:
+  Solo:
+    - name: Described Task
+      start: 2026-04-01
+      end: 2026-04-05
+      description: "Ship the <b>v2</b> API."
+`;
+    const tasks = parseYaml(yaml);
+    expect(tasks[0].description).toBe('Ship the <b>v2</b> API.');
+  });
+
+  it('leaves description undefined when the field is absent', () => {
+    const tasks = parseYaml(SINGLE_PROJECT_YAML);
+    expect(tasks[0].description).toBeUndefined();
+  });
+
   it('returns an empty array for an empty projects map', () => {
     const tasks = parseYaml('projects: {}');
     expect(tasks).toEqual([]);

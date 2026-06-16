@@ -10,14 +10,19 @@ projects:
     - name: Task name
       start: 2026-04-06   # YYYY-MM-DD
       end: 2026-04-10
+      description: "Ship the <b>v2</b> API."   # optional; rendered as raw HTML
       assignees:
         - Alice
         - Bob
     - name: Another task
       start: 2026-04-13
       end: 2026-04-17
-      assignees: []       # empty list is valid
+      assignees: []       # empty list is valid; description may be omitted
 ```
+
+`description` is optional. It surfaces in a hover popover (the trailing "?" marker
+on each task row) and is rendered as raw HTML, so inline tags like `<b>` or `<a>`
+work — input is trusted (you author your own YAML).
 
 Parsed by `src/parseYaml.ts` using `js-yaml`. Date values are coerced to ISO strings (js-yaml parses `YYYY-MM-DD` as JS `Date` objects by default).
 
@@ -37,9 +42,7 @@ src/
   themes.ts       DARK and LIGHT theme token objects, exports Theme interface
 tests/
   parseYaml.test.ts
-  server.test.ts
-example/
-  roadmap.yaml    Example dataset
+roadmap.yaml      Example .yaml file
 vite.config.js    Preact alias, vitest config
 tsconfig.json
 ```

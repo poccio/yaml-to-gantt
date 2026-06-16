@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/compat';
+import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/compat';
 import type { JSX } from 'preact';
 import type { Task } from './parseYaml';
 import type { Theme } from './themes';
@@ -16,6 +16,10 @@ const PROJECT_COLORS = [
 ];
 
 const ACCENT = '#4f8ef7';
+const POPOVER_W = 320;
+const POP_CARET = 7;
+const POP_GAP = 10;
+const POP_MARGIN = 8;
 
 function hexRgb(hex: string): string {
   return [
@@ -61,7 +65,27 @@ interface GanttChartProps {
 export default function GanttChart({ tasks, selectedAssignees, theme }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverOffset, setHoverOffset] = useState<number | null>(null);
+  const [openTask, setOpenTask] = useState<{ task: Task; anchorRect: DOMRect } | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+
+  // Hover-driven popover: open on marker hover/focus, close after a short delay
+  // so the pointer can travel onto the popover (e.g. to click a link inside it).
+  const popoverCloseTimer = useRef<number | null>(null);
+  const cancelPopoverClose = () => {
+    if (popoverCloseTimer.current !== null) {
+      clearTimeout(popoverCloseTimer.current);
+      popoverCloseTimer.current = null;
+    }
+  };
+  const openPopover = (task: Task, anchorRect: DOMRect) => {
+    cancelPopoverClose();
+    setOpenTask({ task, anchorRect });
+  };
+  const schedulePopoverClose = () => {
+    cancelPopoverClose();
+    popoverCloseTimer.current = window.setTimeout(() => setOpenTask(null), 140);
+  };
+  useEffect(() => cancelPopoverClose, []);
 
   useEffect(() => {
     const obs = new ResizeObserver(([entry]) => {
@@ -239,6 +263,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
       style={{ flex: 1, overflow: 'auto', background: theme.surface }}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setHoverOffset(null)}
+      onScroll={() => setOpenTask(null)}
     >
 
       {/* Sticky header */}
@@ -351,7 +376,8 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             <div style={{ display: 'flex', height: PROJ_H }}>
               <div style={{
                 ...labelCell({
-                  background: `linear-gradient(90deg, rgba(${rgb},0.06) 0%, ${theme.surface} 100%)`,
+                  backgroundColor: theme.surface,
+                  backgroundImage: `linear-gradient(90deg, rgba(${rgb},0.06) 0%, rgba(${rgb},0) 100%)`,
                   display: 'flex', alignItems: 'center',
                   paddingLeft: 16, paddingRight: 16,
                   borderLeft: `3px solid ${proj.color}`,
@@ -409,6 +435,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                     }),
                   }}>
                     <span title={task.name} style={{
+                      flex: 1, minWidth: 0,
                       fontSize: 15, color: theme.taskText,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       fontFamily: "'Plus Jakarta Sans', sans-serif",
@@ -416,6 +443,39 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                     }}>
                       {task.name}
                     </span>
+                    <button
+                      aria-label="Task details"
+                      style={{
+                        flexShrink: 0, marginLeft: 8,
+                        width: 18, height: 18, borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 12, fontWeight: 700, lineHeight: 1, cursor: 'pointer',
+                        fontFamily: "'JetBrains Mono', monospace",
+                        border: `1px solid ${theme.chipBorder}`,
+                        background: theme.chipBg,
+                        color: theme.chipText,
+                        padding: 0,
+                        transition: 'color 0.12s, border-color 0.12s, background 0.12s',
+                      }}
+                      onMouseEnter={(e) => {
+                        const b = e.currentTarget as HTMLButtonElement;
+                        b.style.color = theme.accent;
+                        b.style.borderColor = theme.accent;
+                        b.style.background = `rgba(${hexRgb(theme.accent)},0.14)`;
+                        openPopover(task, b.getBoundingClientRect());
+                      }}
+                      onMouseLeave={(e) => {
+                        const b = e.currentTarget as HTMLButtonElement;
+                        b.style.color = theme.chipText;
+                        b.style.borderColor = theme.chipBorder;
+                        b.style.background = theme.chipBg;
+                        schedulePopoverClose();
+                      }}
+                      onFocus={(e) => openPopover(task, (e.currentTarget as HTMLButtonElement).getBoundingClientRect())}
+                      onBlur={schedulePopoverClose}
+                    >
+                      ?
+                    </button>
                   </div>
 
                   <div style={tlCell({
@@ -470,6 +530,145 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
       })}
 
       <div style={{ height: 24 }} />
+
+      {openTask && (
+        <TaskInfoPopover
+          task={openTask.task}
+          anchorRect={openTask.anchorRect}
+          theme={theme}
+          onClose={() => setOpenTask(null)}
+          onHoverEnter={cancelPopoverClose}
+          onHoverLeave={schedulePopoverClose}
+        />
+      )}
     </div>
+  );
+}
+
+interface TaskInfoPopoverProps {
+  task: Task;
+  anchorRect: DOMRect;
+  theme: Theme;
+  onClose: () => void;
+  onHoverEnter: () => void;
+  onHoverLeave: () => void;
+}
+
+interface PopoverPos {
+  top: number;
+  left: number;
+  caretLeft: number;
+  placement: 'above' | 'below';
+}
+
+function TaskInfoPopover({ task, anchorRect, theme, onClose, onHoverEnter, onHoverLeave }: TaskInfoPopoverProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<PopoverPos | null>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const h = el.offsetHeight;
+    const anchorCenterX = anchorRect.left + anchorRect.width / 2;
+
+    let left = anchorCenterX - POPOVER_W / 2;
+    left = Math.max(POP_MARGIN, Math.min(left, window.innerWidth - POPOVER_W - POP_MARGIN));
+
+    const spaceBelow = window.innerHeight - anchorRect.bottom;
+    let placement: 'above' | 'below';
+    let top: number;
+    if (spaceBelow >= h + POP_GAP + POP_MARGIN) {
+      placement = 'below';
+      top = anchorRect.bottom + POP_GAP;
+    } else if (anchorRect.top >= h + POP_GAP + POP_MARGIN) {
+      placement = 'above';
+      top = anchorRect.top - POP_GAP - h;
+    } else {
+      placement = 'below';
+      top = Math.max(POP_MARGIN, window.innerHeight - h - POP_MARGIN);
+    }
+
+    let caretLeft = anchorCenterX - left;
+    caretLeft = Math.max(16, Math.min(caretLeft, POPOVER_W - 16));
+
+    setPos({ top, left, caretLeft, placement });
+  }, [anchorRect]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onResize = () => onClose();
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('click', onDocClick);
+    window.addEventListener('resize', onResize);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('click', onDocClick);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [onClose]);
+
+  const isDark = theme.colorScheme === 'dark';
+
+  return createPortal(
+    <div
+      ref={ref}
+      onMouseEnter={onHoverEnter}
+      onMouseLeave={onHoverLeave}
+      style={{
+        position: 'fixed',
+        top: pos ? pos.top : -9999,
+        left: pos ? pos.left : -9999,
+        width: POPOVER_W,
+        visibility: pos ? 'visible' : 'hidden',
+        background: theme.raised,
+        border: `1px solid ${theme.border}`,
+        borderRadius: 10,
+        boxShadow: isDark
+          ? '0 8px 28px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03)'
+          : '0 8px 28px rgba(0,0,0,0.12)',
+        padding: '14px 16px',
+        zIndex: 1000,
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+      }}
+    >
+      {pos && (
+        <div style={{
+          position: 'absolute',
+          left: pos.caretLeft - POP_CARET,
+          ...(pos.placement === 'below' ? { top: -POP_CARET } : { bottom: -POP_CARET }),
+          width: POP_CARET * 2,
+          height: POP_CARET * 2,
+          background: theme.raised,
+          borderLeft: `1px solid ${theme.border}`,
+          borderTop: `1px solid ${theme.border}`,
+          transform: pos.placement === 'below' ? 'rotate(45deg)' : 'rotate(225deg)',
+        }} />
+      )}
+
+      <div style={{
+        fontSize: 15,
+        fontWeight: 700,
+        color: theme.text,
+        marginBottom: 8,
+        lineHeight: 1.3,
+      }}>
+        {task.name}
+      </div>
+
+      {task.description ? (
+        <div
+          style={{ fontSize: 14, color: theme.text, lineHeight: 1.5, wordBreak: 'break-word' }}
+          dangerouslySetInnerHTML={{ __html: task.description }}
+        />
+      ) : (
+        <div style={{ fontSize: 13, color: theme.textMuted, fontStyle: 'italic', lineHeight: 1.5 }}>
+          No description yet. Add a <code>description:</code> field to this task in your YAML.
+        </div>
+      )}
+    </div>,
+    document.body,
   );
 }
