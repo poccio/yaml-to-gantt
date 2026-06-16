@@ -65,6 +65,7 @@ interface GanttChartProps {
 export default function GanttChart({ tasks, selectedAssignees, theme }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverOffset, setHoverOffset] = useState<number | null>(null);
+  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [openTask, setOpenTask] = useState<{ task: Task; anchorRect: DOMRect } | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -269,7 +270,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
       ref={containerRef}
       style={{ flex: 1, overflow: 'auto', background: theme.surface }}
       onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHoverOffset(null)}
+      onMouseLeave={() => { setHoverOffset(null); setHoveredRow(null); }}
       onScroll={() => setOpenTask(null)}
     >
 
@@ -380,7 +381,11 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
           <div key={proj.name}>
 
             {/* Project header row */}
-            <div style={{ display: 'flex', height: PROJ_H }}>
+            <div style={{
+              display: 'flex', height: PROJ_H,
+              opacity: hoveredRow !== null ? 0.4 : 1,
+              transition: 'opacity 0.15s ease',
+            }}>
               <div style={{
                 ...labelCell({
                   backgroundColor: theme.surface,
@@ -425,6 +430,8 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
               const ghostLeft = baseStartOff * effectiveDayW;
               const ghostW = hasBaseline ? Math.max((baseEndOff - baseStartOff + 1) * effectiveDayW, 8) : 0;
               const isHl = !!selectedAssignees && task.assignees.some(a => selectedAssignees.has(a));
+              const rowId = `${proj.name}::${task.name}`;
+              const isRowHovered = hoveredRow === rowId;
 
               const approxChipW =
                 task.assignees.reduce((s, a) => s + a.length * 6.2 + 12, 0) +
@@ -436,10 +443,21 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                   : chipAtRight;
 
               return (
-                <div key={task.name} style={{ display: 'flex', height: ROW_H }}>
+                <div
+                  key={task.name}
+                  onMouseEnter={() => setHoveredRow(rowId)}
+                  style={{
+                    display: 'flex', height: ROW_H,
+                    opacity: hoveredRow !== null && !isRowHovered ? 0.4 : 1,
+                    transition: 'opacity 0.15s ease',
+                  }}
+                >
                   <div style={{
                     ...labelCell({
-                      background: theme.surface,
+                      backgroundColor: theme.surface,
+                      backgroundImage: isRowHovered
+                        ? `linear-gradient(${theme.rowHover}, ${theme.rowHover})`
+                        : undefined,
                       display: 'flex', alignItems: 'center',
                       paddingLeft: 22, paddingRight: 10,
                       borderRight: `1px solid ${theme.borderInner}`,
@@ -494,6 +512,13 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                     borderBottom: `1px solid ${theme.borderSubtle}`,
                     ...weekGrid,
                   })}>
+                    {isRowHovered && (
+                      <div style={{
+                        position: 'absolute', inset: 0,
+                        background: theme.rowHover,
+                        zIndex: 0, pointerEvents: 'none',
+                      }} />
+                    )}
                     <Crosshair height={ROW_H} />
                     <TodayLine height={ROW_H} />
 
@@ -507,7 +532,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                         borderRadius: 6,
                         background: theme.ghostFill,
                         border: `1.5px dashed ${theme.ghostBorder}`,
-                        opacity: selectedAssignees && !isHl ? 0.15 : 1,
+                        opacity: selectedAssignees && !isHl && !isRowHovered ? 0.15 : 1,
                         transition: 'opacity 0.2s ease',
                         zIndex: 1, pointerEvents: 'none',
                       }} />
@@ -520,7 +545,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                       width: barW, height: 18, borderRadius: 5,
                       background: `linear-gradient(180deg, ${proj.color} 0%, ${proj.color}cc 100%)`,
                       boxShadow: `0 2px 8px rgba(${rgb},0.3), 0 0 0 0.5px rgba(${rgb},0.2)`,
-                      opacity: selectedAssignees && !isHl ? 0.15 : 1,
+                      opacity: selectedAssignees && !isHl && !isRowHovered ? 0.15 : 1,
                       transition: 'opacity 0.2s ease',
                       zIndex: 2,
                     }} />
@@ -532,7 +557,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                         top: '50%', transform: 'translateY(-50%)',
                         display: 'flex', gap: 3,
                         zIndex: 3, pointerEvents: 'none',
-                        opacity: selectedAssignees && !isHl ? 0.2 : 1,
+                        opacity: selectedAssignees && !isHl && !isRowHovered ? 0.2 : 1,
                         transition: 'opacity 0.2s ease',
                       }}>
                         {task.assignees.map(a => (
