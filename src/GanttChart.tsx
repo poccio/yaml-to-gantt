@@ -103,7 +103,12 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   }, [tasks]);
 
   const { rangeStart, totalDays, months, firstMondayOffset } = useMemo(() => {
-    const allDates = tasks.flatMap(t => [parseDay(t.start), parseDay(t.end)]);
+    const allDates = tasks.flatMap(t => {
+      const ds = [parseDay(t.start), parseDay(t.end)];
+      if (t.originallyPlannedStart) ds.push(parseDay(t.originallyPlannedStart));
+      if (t.originallyPlannedEnd) ds.push(parseDay(t.originallyPlannedEnd));
+      return ds;
+    });
     const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
     const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
 
@@ -152,9 +157,11 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   }, [rangeStart, totalDays]);
 
   const todayOffset = useMemo(() => {
-    const t = new Date();
-    t.setHours(0, 0, 0, 0);
-    const off = daysBetween(rangeStart, t);
+    // "Today" is the current calendar day in UTC, placed on the same
+    // local-midnight grid the task bars use (parseDay / rangeStart).
+    const now = new Date();
+    const today = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const off = daysBetween(rangeStart, today);
     return off >= 0 && off < totalDays ? off : null;
   }, [rangeStart, totalDays]);
 
@@ -412,6 +419,11 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
               const endOff = daysBetween(rangeStart, parseDay(task.end));
               const barLeft = startOff * effectiveDayW;
               const barW = Math.max((endOff - startOff + 1) * effectiveDayW, 8);
+              const hasBaseline = !!task.originallyPlannedStart && !!task.originallyPlannedEnd;
+              const baseStartOff = hasBaseline ? daysBetween(rangeStart, parseDay(task.originallyPlannedStart!)) : 0;
+              const baseEndOff = hasBaseline ? daysBetween(rangeStart, parseDay(task.originallyPlannedEnd!)) : 0;
+              const ghostLeft = baseStartOff * effectiveDayW;
+              const ghostW = hasBaseline ? Math.max((baseEndOff - baseStartOff + 1) * effectiveDayW, 8) : 0;
               const isHl = !!selectedAssignees && task.assignees.some(a => selectedAssignees.has(a));
 
               const approxChipW =
@@ -485,7 +497,23 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                     <Crosshair height={ROW_H} />
                     <TodayLine height={ROW_H} />
 
-                    {/* Bar */}
+                    {/* Baseline ghost (original plan). The live bar overshooting this
+                        outline — or sitting right of it — is what communicates the slip. */}
+                    {hasBaseline && (
+                      <div style={{
+                        position: 'absolute',
+                        left: ghostLeft, top: '50%', transform: 'translateY(-50%)',
+                        width: ghostW, height: 26, // taller than the live bar so the ghost frames it above/below
+                        borderRadius: 6,
+                        background: theme.ghostFill,
+                        border: `1.5px dashed ${theme.ghostBorder}`,
+                        opacity: selectedAssignees && !isHl ? 0.15 : 1,
+                        transition: 'opacity 0.2s ease',
+                        zIndex: 1, pointerEvents: 'none',
+                      }} />
+                    )}
+
+                    {/* Live bar */}
                     <div style={{
                       position: 'absolute',
                       left: barLeft, top: '50%', transform: 'translateY(-50%)',

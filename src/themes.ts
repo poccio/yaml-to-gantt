@@ -21,6 +21,8 @@ export interface Theme {
   chipBorder: string;
   chipText: string;
   error: string;
+  ghostBorder: string;
+  ghostFill: string;
   colorScheme: 'dark' | 'light';
 }
 
@@ -32,7 +34,8 @@ export const DARK: Theme = {
   monthLabel: '#3d5070', dayMonday: '#7a98c0', dayWeekend: '#283344',
   weekBandAlpha: 'rgba(255,255,255,0.014)', weekLineAlpha: 'rgba(255,255,255,0.045)',
   chipBg: 'rgba(255,255,255,0.07)', chipBorder: 'rgba(255,255,255,0.12)',
-  chipText: '#7a9ab8', error: '#f87171', colorScheme: 'dark',
+  chipText: '#7a9ab8', error: '#f87171',
+  ghostBorder: 'rgba(190,200,215,0.85)', ghostFill: 'rgba(255,255,255,0.05)', colorScheme: 'dark',
 };
 
 export const LIGHT: Theme = {
@@ -43,5 +46,6 @@ export const LIGHT: Theme = {
   monthLabel: '#9aaabb', dayMonday: '#7a98c0', dayWeekend: '#c8d0dc',
   weekBandAlpha: 'rgba(0,0,0,0.022)', weekLineAlpha: 'rgba(0,0,0,0.07)',
   chipBg: 'rgba(0,0,0,0.05)', chipBorder: 'rgba(0,0,0,0.12)',
-  chipText: '#4a5978', error: '#f87171', colorScheme: 'light',
+  chipText: '#4a5978', error: '#f87171',
+  ghostBorder: 'rgba(80,90,110,0.8)', ghostFill: 'rgba(0,0,0,0.045)', colorScheme: 'light',
 };

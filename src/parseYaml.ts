@@ -7,6 +7,8 @@ export interface Task {
   end: string;
   assignees: string[];
   description?: string;
+  originallyPlannedStart?: string;
+  originallyPlannedEnd?: string;
 }
 
 interface YamlTaskItem {
@@ -15,6 +17,8 @@ interface YamlTaskItem {
   end: string | Date;
   assignees?: string[];
   description?: string;
+  originallyPlannedStart?: string | Date;
+  originallyPlannedEnd?: string | Date;
 }
 
 interface YamlDocument {
@@ -29,6 +33,8 @@ export function parseYaml(text: string): Task[] {
   const tasks: Task[] = [];
   for (const [project, items] of Object.entries(doc.projects)) {
     for (const item of items) {
+      const hasBaseline =
+        item.originallyPlannedStart != null && item.originallyPlannedEnd != null;
       tasks.push({
         project,
         name: item.name,
@@ -36,6 +42,8 @@ export function parseYaml(text: string): Task[] {
         end: toDateStr(item.end),
         assignees: item.assignees ?? [],
         description: item.description,
+        originallyPlannedStart: hasBaseline ? toDateStr(item.originallyPlannedStart!) : undefined,
+        originallyPlannedEnd: hasBaseline ? toDateStr(item.originallyPlannedEnd!) : undefined,
       });
     }
   }

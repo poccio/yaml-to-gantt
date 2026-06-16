@@ -102,4 +102,68 @@ projects:
   it('throws on invalid YAML', () => {
     expect(() => parseYaml('{')).toThrow();
   });
+
+  it('parses baseline dates when both are present', () => {
+    const yaml = `
+projects:
+  Solo:
+    - name: Slipped Task
+      start: 2026-04-13
+      end: 2026-04-24
+      originallyPlannedStart: 2026-04-06
+      originallyPlannedEnd: 2026-04-17
+`;
+    const tasks = parseYaml(yaml);
+    expect(tasks[0].originallyPlannedStart).toBe('2026-04-06');
+    expect(tasks[0].originallyPlannedEnd).toBe('2026-04-17');
+  });
+
+  it('ignores a lone baseline field (both must be present)', () => {
+    const yaml = `
+projects:
+  Solo:
+    - name: Half Baseline
+      start: 2026-04-13
+      end: 2026-04-24
+      originallyPlannedEnd: 2026-04-17
+`;
+    const tasks = parseYaml(yaml);
+    expect(tasks[0].originallyPlannedStart).toBeUndefined();
+    expect(tasks[0].originallyPlannedEnd).toBeUndefined();
+  });
+
+  it('ignores a lone originallyPlannedStart (the symmetric case)', () => {
+    const yaml = `
+projects:
+  Solo:
+    - name: Half Baseline
+      start: 2026-04-13
+      end: 2026-04-24
+      originallyPlannedStart: 2026-04-06
+`;
+    const tasks = parseYaml(yaml);
+    expect(tasks[0].originallyPlannedStart).toBeUndefined();
+    expect(tasks[0].originallyPlannedEnd).toBeUndefined();
+  });
+
+  it('leaves baseline fields undefined when absent', () => {
+    const tasks = parseYaml(SINGLE_PROJECT_YAML);
+    expect(tasks[0].originallyPlannedStart).toBeUndefined();
+    expect(tasks[0].originallyPlannedEnd).toBeUndefined();
+  });
+
+  it('coerces Date-object baseline values to YYYY-MM-DD strings', () => {
+    const yaml = `
+projects:
+  Solo:
+    - name: Date Baseline
+      start: 2026-04-13
+      end: 2026-04-24
+      originallyPlannedStart: 2026-04-06
+      originallyPlannedEnd: 2026-04-17
+`;
+    const tasks = parseYaml(yaml);
+    expect(typeof tasks[0].originallyPlannedStart).toBe('string');
+    expect(tasks[0].originallyPlannedStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
 });

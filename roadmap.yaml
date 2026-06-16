@@ -8,7 +8,9 @@ projects:
         - Alice
     - name: Landing page
       start: 2025-07-07
-      end: 2025-07-18
+      end: 2025-07-24
+      originallyPlannedStart: 2025-07-07
+      originallyPlannedEnd: 2025-07-18
       assignees:
         - Bob
         - Carol
@@ -19,8 +21,10 @@ projects:
 
   Engineering:
     - name: API development
-      start: 2025-07-01
-      end: 2025-07-18
+      start: 2025-07-08
+      end: 2025-07-26
+      originallyPlannedStart: 2025-07-01
+      originallyPlannedEnd: 2025-07-18
       assignees:
         - Dave
     - name: Frontend integration
