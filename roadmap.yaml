@@ -3,7 +3,7 @@ projects:
     - name: Market research
       start: 2025-07-01
       end: 2025-07-11
-      description: "Interview <b>10 target customers</b> and summarize findings. See the <a href='https://example.com'>research brief</a>."
+      description: "Interview <b>10 target customers</b> and summarize findings"
       assignees:
         - Alice
     - name: Landing page

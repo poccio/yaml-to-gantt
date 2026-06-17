@@ -40,3 +40,7 @@ coverage/
 
 # visual brainstorm companion
 .superpowers/
+
+# demo gif pipeline intermediates (demo.gif itself is committed — README links to it)
+assets/gif/terminal/terminal.gif
+assets/gif/screenshot/screenshot-dark.png

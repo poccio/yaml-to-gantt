@@ -16,16 +16,24 @@ This starts a local server, opens your browser, and renders the Gantt chart. The
 
 ```yaml
 projects:
-  Project Name:
-    - name: Task name
+  Product Launch:
+    - name: Market research
       start: 2025-07-01   # YYYY-MM-DD
       end: 2025-07-11
+      description: "Interview <b>10 target customers</b> and summarize findings"   # optional, rendered as HTML
       assignees:
         - Alice
+    - name: Landing page
+      start: 2025-07-07
+      end: 2025-07-24
+      originallyPlannedStart: 2025-07-07   # optional baseline
+      originallyPlannedEnd: 2025-07-18
+      assignees:
         - Bob
-    - name: Another task
-      start: 2025-07-14
-      end: 2025-07-18
+        - Carol
+    - name: Beta release
+      start: 2025-07-21
+      end: 2025-07-25
       assignees: []       # empty list is valid
 ```
 
@@ -33,10 +41,14 @@ projects:
 - **name**: task label shown in the chart
 - **start** / **end**: date range (inclusive), in `YYYY-MM-DD` format
 - **assignees**: list of people assigned to the task (can be empty)
+- **description** _(optional)_: surfaces in a hover popover via the trailing "?" marker on the task row. Rendered as raw HTML, so inline tags like `<b>` or `<a>` work (input is trusted — you author your own YAML)
+- **originallyPlannedStart** / **originallyPlannedEnd** _(optional)_: the task's original baseline dates. Set both to render the baseline alongside the actual `start`/`end`, making slippage and delays visible at a glance
 
 ## Features
 
 - **Live reload** — edit your YAML, see changes instantly
+- **Task descriptions** — add a `description` to any task; it surfaces in a hover popover (rich HTML supported)
+- **Delay visualization** — set `originallyPlannedStart`/`originallyPlannedEnd` to show a task's baseline alongside its actual dates
 - **Assignee filtering** — click pills to highlight specific people
 - **Hover crosshair** — hover over the timeline to see exact dates
 - **Light/dark theme** — toggle in the toolbar, defaults to OS preference

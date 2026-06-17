@@ -6,23 +6,35 @@ A Vite + Preact app that renders an interactive Gantt chart from a YAML roadmap 
 
 ```yaml
 projects:
-  Project Name:
-    - name: Task name
-      start: 2026-04-06   # YYYY-MM-DD
-      end: 2026-04-10
-      description: "Ship the <b>v2</b> API."   # optional; rendered as raw HTML
+  Product Launch:
+    - name: Market research
+      start: 2025-07-01   # YYYY-MM-DD
+      end: 2025-07-11
+      description: "Interview <b>10 target customers</b> and summarize findings"   # optional; rendered as raw HTML
       assignees:
         - Alice
+    - name: Landing page
+      start: 2025-07-07
+      end: 2025-07-24
+      originallyPlannedStart: 2025-07-07   # optional baseline (delay viz)
+      originallyPlannedEnd: 2025-07-18
+      assignees:
         - Bob
-    - name: Another task
-      start: 2026-04-13
-      end: 2026-04-17
+        - Carol
+    - name: Beta release
+      start: 2025-07-21
+      end: 2025-07-25
       assignees: []       # empty list is valid; description may be omitted
 ```
 
 `description` is optional. It surfaces in a hover popover (the trailing "?" marker
 on each task row) and is rendered as raw HTML, so inline tags like `<b>` or `<a>`
 work — input is trusted (you author your own YAML).
+
+`originallyPlannedStart` / `originallyPlannedEnd` are optional and must be
+provided together — they render the task's original baseline alongside the
+actual `start`/`end`, making slippage and delays visible at a glance. If only
+one is set, the baseline is ignored (see `hasBaseline` in `src/parseYaml.ts`).
 
 Parsed by `src/parseYaml.ts` using `js-yaml`. Date values are coerced to ISO strings (js-yaml parses `YYYY-MM-DD` as JS `Date` objects by default).
 

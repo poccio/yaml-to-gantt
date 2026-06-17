@@ -1,0 +1,13 @@
+projects:
+  ProductX:
+    - name: Design
+      start: 2026-06-08
+      end: 2026-06-12
+      originallyPlannedStart: 2026-06-01
+      originallyPlannedEnd: 2026-06-05
+      description: "Design the new <b>UI</b>"
+      assignees: [Alice]
+    - name: Development
+      start: 2026-06-15
+      end: 2026-06-26
+      assignees: [Bob, Carol]
