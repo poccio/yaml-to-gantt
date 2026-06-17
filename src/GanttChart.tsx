@@ -371,7 +371,11 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
         </div>
       </div>
 
-      {/* Project sections */}
+      {/* Project sections. The "today" line for the body is rendered once as a
+          full-height overlay below (not per row) so per-row hover dimming —
+          opacity on the row div, which would cap any child's opacity — can't
+          fade it. */}
+      <div style={{ position: 'relative' }}>
       {projects.map(proj => {
         const rgb = hexRgb(proj.color);
         const visibleTasks = proj.tasks.filter(isVisible);
@@ -414,7 +418,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                 ...weekGrid,
               })}>
                 <Crosshair height={PROJ_H} />
-                <TodayLine height={PROJ_H} />
               </div>
             </div>
 
@@ -520,7 +523,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                       }} />
                     )}
                     <Crosshair height={ROW_H} />
-                    <TodayLine height={ROW_H} />
 
                     {/* Baseline ghost (original plan). The live bar overshooting this
                         outline — or sitting right of it — is what communicates the slip. */}
@@ -581,6 +583,18 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
           </div>
         );
       })}
+
+        {todayOffset !== null && (
+          <div style={{
+            position: 'absolute',
+            left: LABEL_W + todayOffset * effectiveDayW, top: 0, bottom: 0,
+            width: 2,
+            background: `linear-gradient(180deg, ${ACCENT}, rgba(79,142,247,0.6))`,
+            boxShadow: `0 0 14px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,
+            zIndex: 4, pointerEvents: 'none',
+          }} />
+        )}
+      </div>
 
       <div style={{ height: 24 }} />
 
