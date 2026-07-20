@@ -12,6 +12,12 @@ npx yaml-to-gantt roadmap.yaml
 
 This starts a local server, opens your browser, and renders the Gantt chart. The chart **live-reloads** whenever you save the YAML file.
 
+Pass `--no-open` to start the server without opening a browser:
+
+```bash
+npx yaml-to-gantt roadmap.yaml --no-open
+```
+
 ## YAML Format
 
 ```yaml

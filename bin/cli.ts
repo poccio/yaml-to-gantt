@@ -5,12 +5,17 @@ import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import { start } from '../server/index.js';
 
-const filePath = process.argv[2];
+const args = process.argv.slice(2);
+const noOpen = args.includes('--no-open');
+const filePath = args.find((a) => !a.startsWith('--'));
 
 if (!filePath) {
-  console.log('Usage: yaml-to-gantt <file.yaml>');
+  console.log('Usage: yaml-to-gantt <file.yaml> [--no-open]');
   console.log('');
   console.log('  Visualize a YAML roadmap as an interactive Gantt chart.');
+  console.log('');
+  console.log('Options:');
+  console.log('  --no-open    Start the server without opening a browser');
   console.log('');
   console.log('Example:');
   console.log('  npx yaml-to-gantt roadmap.yaml');
@@ -33,11 +38,13 @@ console.log(`  Serving ${absPath}`);
 console.log(`  ${url}\n`);
 console.log(`  Watching for changes. Press Ctrl+C to stop.\n`);
 
-const platform = process.platform;
-try {
-  if (platform === 'darwin') execSync(`open "${url}"`);
-  else if (platform === 'win32') execSync(`start "" "${url}"`);
-  else execSync(`xdg-open "${url}"`);
-} catch {
-  // Browser open failed silently — URL is printed, user can open manually
+if (!noOpen) {
+  const platform = process.platform;
+  try {
+    if (platform === 'darwin') execSync(`open "${url}"`);
+    else if (platform === 'win32') execSync(`start "" "${url}"`);
+    else execSync(`xdg-open "${url}"`);
+  } catch {
+    // Browser open failed silently — URL is printed, user can open manually
+  }
 }
