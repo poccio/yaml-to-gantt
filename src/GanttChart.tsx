@@ -193,23 +193,32 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     ? Math.max(DAY_W, (containerWidth - LABEL_W) / totalDays)
     : DAY_W;
 
-  // Open focused on today, not on the start of the roadmap. Mount-only: an SSE
+  // Open focused on today, not on the start of the roadmap. Once-only: an SSE
   // hot-reload of the YAML must not yank the scroll position out from under
-  // whatever the user was looking at.
+  // whatever the user was looking at, and neither must a window resize.
+  //
+  // "Once" cannot mean "on mount", though. A chart mounted inside a hidden
+  // subtree (display: none) has no layout box, so a scrollLeft assignment is
+  // silently discarded — that is how an embedder that reveals the chart later
+  // (a reveal.js slide, a tab, an accordion) ended up stuck at rangeStart. So
+  // wait for the first real layout, then focus today exactly once. On a
+  // normally-visible mount the container already has a width, so this still
+  // runs on the first pass and nothing changes.
   //
   // The browser clamps scrollLeft to [0, scrollWidth - clientWidth], which
   // handles both out-of-range cases for free: a future-only roadmap stays at
   // the left edge, a fully-past one lands at the right showing the tail. When
   // the timeline is short enough to fit, there is nothing to scroll and this
   // is a no-op.
+  const hasFocusedToday = useRef(false);
   useLayoutEffect(() => {
-    // containerWidth is still 0 here (ResizeObserver has not fired), so
-    // effectiveDayW is DAY_W — which is exactly the width used whenever the
-    // timeline actually overflows, i.e. whenever this scroll does anything.
-    if (containerRef.current) {
-      containerRef.current.scrollLeft = (todayRawOffset - TODAY_LEAD_IN) * DAY_W;
-    }
-  }, []);
+    const container = containerRef.current;
+    if (hasFocusedToday.current || !container || container.clientWidth === 0) return;
+    // DAY_W, not effectiveDayW: the two differ only when the timeline fits the
+    // container, and then there is nothing to scroll anyway.
+    container.scrollLeft = (todayRawOffset - TODAY_LEAD_IN) * DAY_W;
+    hasFocusedToday.current = true;
+  }, [containerWidth, todayRawOffset]);
 
   const weekGrid = {
     backgroundImage: `
