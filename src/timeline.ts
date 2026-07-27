@@ -19,18 +19,37 @@ export interface TimelineRange {
   firstMondayOffset: number;
 }
 
+// Every date in this module is a *calendar* date pinned to local midnight, and
+// every operation on one goes through the Date constructor, which walks the
+// calendar. Never step by a fixed 86_400_000: a fall-back day is 25 hours long,
+// so millisecond arithmetic drifts onto 23:00 of the day before and stays there.
+
 /**
  * A `YYYY-MM-DD` date read as *local* midnight. Everything in the chart sits on
  * this grid, so reading these as UTC instead would shift every bar by a day for
  * any viewer west of UTC.
  */
 export function parseDay(s: string): Date {
-  return new Date(s + 'T00:00:00');
+  const [year, month, day] = s.split('-').map(Number);
+  return new Date(year, month - 1, day);
 }
 
-/** Whole days from `a` to `b`, rounded so a 23- or 25-hour DST day still counts as one. */
+/** The calendar day `days` after `date` (or before it, for a negative count). */
+export function addDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+/**
+ * Whole calendar days from `a` to `b`, ignoring any time of day.
+ *
+ * Both dates are re-pinned to UTC midnight before subtracting. UTC has no DST,
+ * so there the division is exact and needs no rounding to absorb 23- and
+ * 25-hour days.
+ */
 export function daysBetween(a: Date, b: Date): number {
-  return Math.round((b.getTime() - a.getTime()) / 86_400_000);
+  const from = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const to = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return (to - from) / 86_400_000;
 }
 
 /**
@@ -48,36 +67,36 @@ export function computeRange(tasks: Task[]): TimelineRange {
   const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
   const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
 
-  const rangeStart = new Date(minDate);
-  rangeStart.setDate(rangeStart.getDate() - RANGE_PAD);
-  rangeStart.setHours(0, 0, 0, 0);
-
-  const rangeEnd = new Date(maxDate);
-  rangeEnd.setDate(rangeEnd.getDate() + RANGE_PAD + 2);
+  const rangeStart = addDays(minDate, -RANGE_PAD);
+  const rangeEnd = addDays(maxDate, RANGE_PAD + 2);
 
   const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
 
-  const firstMonday = new Date(rangeStart);
-  while (firstMonday.getDay() !== 1) firstMonday.setDate(firstMonday.getDate() + 1);
-  const firstMondayOffset = daysBetween(rangeStart, firstMonday);
+  // Days to skip before the first Monday, 0 when rangeStart already is one.
+  // getDay() is 0 for Sunday, so the wrap is what keeps a Monday at 0 instead
+  // of pushing it a full week out.
+  const firstMondayOffset = (8 - rangeStart.getDay()) % 7;
 
   const months: MonthInfo[] = [];
-  const cursor = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
-  while (cursor <= rangeEnd) {
-    const mStart = new Date(Math.max(cursor.getTime(), rangeStart.getTime()));
-    const nextMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  let year = rangeStart.getFullYear();
+  let month = rangeStart.getMonth();
+  for (
+    let monthStart = new Date(year, month, 1);
+    monthStart <= rangeEnd;
+    monthStart = new Date(year, ++month, 1)
+  ) {
     // Inclusive last day of the cell, at local midnight like every other date on
     // this grid — day 0 of next month is the last day of this one. Ending on
-    // 23:59:59.999 instead would make daysBetween round a day up, so every cell
-    // but the last came out one day too wide and overlapped its neighbour.
-    const lastOfMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-    const mEnd = new Date(Math.min(lastOfMonth.getTime(), rangeEnd.getTime()));
+    // 23:59:59.999 instead would make the cell a day too wide and overlap its
+    // neighbour. The constructor normalizes month 12 into January of next year.
+    const monthEnd = new Date(year, month + 1, 0);
+    const mStart = monthStart < rangeStart ? rangeStart : monthStart;
+    const mEnd = monthEnd > rangeEnd ? rangeEnd : monthEnd;
     months.push({
-      label: cursor.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+      label: monthStart.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
       offset: daysBetween(rangeStart, mStart),
       width: daysBetween(mStart, mEnd) + 1,
     });
-    cursor.setTime(nextMonth.getTime());
   }
 
   return { rangeStart, totalDays, months, firstMondayOffset };
@@ -91,9 +110,8 @@ export function computeRange(tasks: Task[]): TimelineRange {
  * `now`'s *local* calendar day is what counts — the grid is local, so reading
  * UTC date parts here would place today a day off for the width of the UTC
  * offset every day (evening hours west of UTC, small hours east of it).
+ * `daysBetween` drops the clock time for us, so `now` can be an instant.
  */
 export function todayOffset(rangeStart: Date, now: Date): number {
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  return daysBetween(rangeStart, today);
+  return daysBetween(rangeStart, now);
 }

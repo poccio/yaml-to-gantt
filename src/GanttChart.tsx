@@ -2,7 +2,7 @@ import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } f
 import type { JSX } from 'preact';
 import type { Task } from './parseYaml';
 import type { Theme } from './themes';
-import { computeRange, daysBetween, parseDay, todayOffset } from './timeline';
+import { addDays, computeRange, daysBetween, parseDay, todayOffset } from './timeline';
 
 const DAY_W = 40;
 const LABEL_W = 280;
@@ -100,7 +100,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   const dayTicks = useMemo((): DayTick[] => {
     const ticks: DayTick[] = [];
     for (let off = 0; off < totalDays; off++) {
-      const d = new Date(rangeStart.getTime() + off * 86_400_000);
+      const d = addDays(rangeStart, off);
       ticks.push({
         offset: off,
         dayNum: d.getDate(),
@@ -199,7 +199,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   };
 
   const hoverDate = hoverOffset !== null
-    ? new Date(rangeStart.getTime() + hoverOffset * 86_400_000)
+    ? addDays(rangeStart, hoverOffset)
       .toLocaleString('en-US', { month: 'short', day: 'numeric' })
     : null;
 

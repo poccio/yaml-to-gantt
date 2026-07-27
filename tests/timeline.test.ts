@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { computeRange, parseDay, todayOffset } from '../src/timeline';
+import { addDays, computeRange, parseDay, todayOffset } from '../src/timeline';
 import type { Task } from '../src/parseYaml';
 
 // Every expectation here is hand-derived in this one zone. It is deliberately
@@ -37,6 +37,25 @@ describe('parseDay', () => {
   // local, shifting every bar a day west of UTC.
   test('reads a date string as local midnight, not UTC midnight', () => {
     expect(parseDay('2026-07-01').getTime()).toBe(new Date(2026, 6, 1).getTime());
+  });
+});
+
+describe('addDays', () => {
+  // The day-number header and the hover tooltip walk the grid one column at a
+  // time. Nov 1 2026 is a 25-hour day in New York, so stepping by a fixed
+  // 86_400_000 falls an hour behind and lands on 23:00 of the day before —
+  // printing the same day number twice and labelling every later column a day
+  // behind the bars, which count calendar days.
+  test('advances one calendar day per step across a fall-back transition', () => {
+    const friday = new Date(2026, 9, 30); // Fri Oct 30 2026
+
+    const dayNumbers = [0, 1, 2, 3, 4].map((off) => addDays(friday, off).getDate());
+
+    expect(dayNumbers).toEqual([30, 31, 1, 2, 3]);
+  });
+
+  test('walks backwards for a negative count', () => {
+    expect(addDays(new Date(2026, 2, 3), -5).getTime()).toBe(new Date(2026, 1, 26).getTime());
   });
 });
 
@@ -79,10 +98,14 @@ describe('computeRange', () => {
   // The week gridlines are a repeating gradient offset by this value; get it
   // wrong and every week boundary is drawn on the wrong weekday.
   test('offsets the week gridlines to the first Monday in the range', () => {
-    const { firstMondayOffset } = computeRange([task()]);
-
     // rangeStart is Sat Jun 27 2026, so the first Monday is Jun 29.
-    expect(firstMondayOffset).toBe(2);
+    expect(computeRange([task()]).firstMondayOffset).toBe(2);
+
+    // rangeStart is itself Mon Jul 27 2026, so there is nothing to skip — the
+    // boundary case that a "days until Monday" formula without a wrap gets
+    // wrong by a full week.
+    const laterTask = task({ start: '2026-07-31', end: '2026-08-05' });
+    expect(computeRange([laterTask]).firstMondayOffset).toBe(0);
   });
 
   // Each month cell is absolutely positioned at `offset` days with `width` days.
