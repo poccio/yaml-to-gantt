@@ -42,18 +42,21 @@ Parsed by `src/parseYaml.ts` using `js-yaml`. Date values are coerced to ISO str
 
 ```
 bin/
-  cli.js          CLI entry point — starts server, passes absolute path in ?file=, opens browser
+  cli.ts          CLI entry point — starts server, passes absolute path in ?file=, opens browser
+                  (bin/*.js and server/*.js are build output — gitignored, shipped in the tarball)
 server/
-  index.js        HTTP server — static files, YAML endpoint, SSE
+  index.ts        HTTP server — static files, YAML endpoint, SSE
 src/
   main.tsx        Preact entry point
   App.tsx         Card layout, file loading, assignee filter pills, New button, theme toggle
                   Also contains EmptyState and Pill components
   GanttChart.tsx  Custom Gantt renderer — pure Preact + CSS
+  timeline.ts     Pure day-grid math — parseDay, daysBetween, computeRange, todayOffset
   parseYaml.ts    YAML → flat task array, exports Task interface
+  urlOptions.ts   Query-string → CLI options (file path, hideAssigneeFilter)
   themes.ts       DARK and LIGHT theme token objects, exports Theme interface
 tests/
-  parseYaml.test.ts
+  parseYaml.test.ts   server.test.ts   timeline.test.ts   urlOptions.test.ts
 roadmap.yaml      Example .yaml file
 vite.config.js    Preact alias, vitest config
 tsconfig.json
@@ -74,10 +77,40 @@ The chart is a scrollable flex layout — not a canvas or SVG. Key decisions:
 toolbar's assignee filter pills (the per-bar assignee chips are unaffected).
 
 CLI options reach the client through the URL: `bin/cli.ts` appends them to the
-address it opens and prints (`?file=…&assigneeFilter=off`), and `App.tsx` reads
-them from `URLSearchParams` at module init. A client that navigates to a bare
-`http://localhost:3847/` therefore gets defaults — the same tradeoff `?file=`
-already carries for the displayed filename.
+address it opens and prints (`?file=…&assigneeFilter=off`), and `readUrlOptions`
+in `src/urlOptions.ts` parses them back out. `App.tsx` calls it in a `useState`
+initializer, once per mount — **not at module scope.** Reading `window` while the
+module evaluates throws outside a browser, which makes `App.tsx` unimportable in
+the test suite's node environment. A client that navigates to a bare
+`http://localhost:3847/` gets defaults — the same tradeoff `?file=` already
+carries for the displayed filename.
+
+## Testing
+
+`vitest run`, node environment, no DOM. Nothing renders components, so the rule
+is: **logic worth testing lives in a pure module, not inside a component.**
+`src/timeline.ts` exists for exactly that reason — the day-grid math was private
+to `GanttChart.tsx` and therefore unreachable, which is how a UTC-vs-local
+off-by-one in the today marker shipped.
+
+`tests/timeline.test.ts` pins `process.env.TZ` to `America/New_York` for the
+whole file and hand-derives every expected value in that zone. Both properties
+are load-bearing: a UTC-only run cannot catch a local-vs-UTC mix-up, and New
+York has a DST transition that keeps `daysBetween`'s rounding honest. Feed
+`todayOffset` an explicit `now` rather than reading the clock inside it.
+
+**Everything rendered is untested.** Nothing in `App.tsx` or `GanttChart.tsx`
+has coverage: bar and ghost-bar geometry, `effectiveDayW`, `dayTicks`, the
+assignee-chip flip, the scroll-focus latch, popover placement, `EmptyState`'s
+drag handling, and the empty-roadmap and hidden-filter render branches. Covering
+any of it means adding a jsdom environment and a rendering library first, which
+has not been done.
+
+Until then the cheaper move is to keep pulling logic out of the components: two
+functions still doing day math inline in `GanttChart.tsx` (`dayTicks` and
+`hoverDate`, both stepping by a fixed `86_400_000`) desync from the bars across
+a DST transition — the same class of bug `src/timeline.ts` was extracted to
+catch, still sitting where no test can reach it.
 
 ## Releasing
 
