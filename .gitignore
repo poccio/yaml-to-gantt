@@ -38,8 +38,9 @@ coverage/
 # misc
 *.log
 
-# visual brainstorm companion
+# exclude superpowers
 .superpowers/
+docs/superpowers
 
 # demo gif pipeline intermediates (demo.gif itself is committed — README links to it)
 assets/gif/terminal/terminal.gif
