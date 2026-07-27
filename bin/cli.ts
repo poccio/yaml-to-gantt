@@ -7,15 +7,17 @@ import { start } from '../server/index.js';
 
 const args = process.argv.slice(2);
 const noOpen = args.includes('--no-open');
+const noAssigneeFilter = args.includes('--no-assignee-filter');
 const filePath = args.find((a) => !a.startsWith('--'));
 
 if (!filePath) {
-  console.log('Usage: yaml-to-gantt <file.yaml> [--no-open]');
+  console.log('Usage: yaml-to-gantt <file.yaml> [options]');
   console.log('');
   console.log('  Visualize a YAML roadmap as an interactive Gantt chart.');
   console.log('');
   console.log('Options:');
-  console.log('  --no-open    Start the server without opening a browser');
+  console.log('  --no-open              Start the server without opening a browser');
+  console.log('  --no-assignee-filter   Hide the assignee filter row to save vertical space');
   console.log('');
   console.log('Example:');
   console.log('  npx yaml-to-gantt roadmap.yaml');
@@ -31,7 +33,9 @@ if (!existsSync(absPath)) {
 
 const server = await start(absPath);
 const addr = server.address() as { port: number };
-const url = `http://localhost:${addr.port}?file=${encodeURIComponent(absPath)}`;
+const url =
+  `http://localhost:${addr.port}?file=${encodeURIComponent(absPath)}` +
+  (noAssigneeFilter ? '&assigneeFilter=off' : '');
 
 console.log(`\n  yaml-to-gantt\n`);
 console.log(`  Serving ${absPath}`);

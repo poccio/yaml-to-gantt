@@ -67,6 +67,17 @@ The chart is a scrollable flex layout — not a canvas or SVG. Key decisions:
 - Week gridlines use `repeating-linear-gradient` on `background-image` (zero DOM nodes, tiles infinitely to fill flex cells).
 - Hover crosshair: mouse position is tracked on the scrollable container ref. `xInTimeline = e.clientX - containerRect.left - LABEL_W + container.scrollLeft` gives the correct day offset accounting for scroll.
 
+## CLI flags
+
+`--no-open` skips launching the browser. `--no-assignee-filter` hides the
+toolbar's assignee filter pills (the per-bar assignee chips are unaffected).
+
+CLI options reach the client through the URL: `bin/cli.ts` appends them to the
+address it opens and prints (`?file=…&assigneeFilter=off`), and `App.tsx` reads
+them from `URLSearchParams` at module init. A client that navigates to a bare
+`http://localhost:3847/` therefore gets defaults — the same tradeoff `?file=`
+already carries for the displayed filename.
+
 ## Theming
 
 The app supports dark and light themes. The active theme is a plain object passed as a prop from `App` → `GanttChart` / `EmptyState` / `Pill`. All color tokens live in `src/themes.ts` — do not hardcode hex values in components.

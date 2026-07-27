@@ -13,6 +13,10 @@ function getInitialTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? LIGHT : DARK;
 }
 
+// Set by the CLI's --no-assignee-filter flag, carried in the URL alongside ?file=
+const hideAssigneeFilter =
+  new URLSearchParams(window.location.search).get('assigneeFilter') === 'off';
+
 export default function App() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [selectedAssignees, setSelectedAssignees] = useState<Set<string> | null>(null);
@@ -219,7 +223,7 @@ export default function App() {
           </div>
 
           {/* Row 2: assignee filter pills */}
-          {allAssignees.length > 0 && (
+          {!hideAssigneeFilter && allAssignees.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
               <span style={{
                 fontSize: 12,
