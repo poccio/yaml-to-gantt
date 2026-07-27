@@ -2,13 +2,13 @@ import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } f
 import type { JSX } from 'preact';
 import type { Task } from './parseYaml';
 import type { Theme } from './themes';
+import { computeRange, daysBetween, parseDay, todayOffset } from './timeline';
 
 const DAY_W = 40;
 const LABEL_W = 280;
 const ROW_H = 52;
 const PROJ_H = 54;
 const HDR_H = 68;
-const RANGE_PAD = 4;
 // Days of past context shown to the left of "today" on first render. Roughly a
 // quarter of a typical viewport, so the rest is spent on upcoming work.
 const TODAY_LEAD_IN = 7;
@@ -32,24 +32,10 @@ function hexRgb(hex: string): string {
   ].join(',');
 }
 
-function parseDay(s: string): Date {
-  return new Date(s + 'T00:00:00');
-}
-
-function daysBetween(a: Date, b: Date): number {
-  return Math.round((b.getTime() - a.getTime()) / 86_400_000);
-}
-
 interface Project {
   name: string;
   color: string;
   tasks: Task[];
-}
-
-interface MonthInfo {
-  label: string;
-  offset: number;
-  width: number;
 }
 
 interface DayTick {
@@ -106,45 +92,10 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     );
   }, [tasks]);
 
-  const { rangeStart, totalDays, months, firstMondayOffset } = useMemo(() => {
-    const allDates = tasks.flatMap(t => {
-      const ds = [parseDay(t.start), parseDay(t.end)];
-      if (t.originallyPlannedStart) ds.push(parseDay(t.originallyPlannedStart));
-      if (t.originallyPlannedEnd) ds.push(parseDay(t.originallyPlannedEnd));
-      return ds;
-    });
-    const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
-    const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
-
-    const rangeStart = new Date(minDate);
-    rangeStart.setDate(rangeStart.getDate() - RANGE_PAD);
-    rangeStart.setHours(0, 0, 0, 0);
-
-    const rangeEnd = new Date(maxDate);
-    rangeEnd.setDate(rangeEnd.getDate() + RANGE_PAD + 2);
-
-    const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
-
-    const firstMonday = new Date(rangeStart);
-    while (firstMonday.getDay() !== 1) firstMonday.setDate(firstMonday.getDate() + 1);
-    const firstMondayOffset = daysBetween(rangeStart, firstMonday);
-
-    const months: MonthInfo[] = [];
-    const cursor = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
-    while (cursor <= rangeEnd) {
-      const mStart = new Date(Math.max(cursor.getTime(), rangeStart.getTime()));
-      const nextMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-      const mEnd = new Date(Math.min(nextMonth.getTime() - 1, rangeEnd.getTime()));
-      months.push({
-        label: cursor.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
-        offset: daysBetween(rangeStart, mStart),
-        width: daysBetween(mStart, mEnd) + 1,
-      });
-      cursor.setTime(nextMonth.getTime());
-    }
-
-    return { rangeStart, totalDays, months, firstMondayOffset };
-  }, [tasks]);
+  const { rangeStart, totalDays, months, firstMondayOffset } = useMemo(
+    () => computeRange(tasks),
+    [tasks]
+  );
 
   const dayTicks = useMemo((): DayTick[] => {
     const ticks: DayTick[] = [];
@@ -162,18 +113,10 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
 
   // Day offset of "today" from rangeStart, uncapped — it can fall outside
   // [0, totalDays) for a roadmap that is entirely in the past or the future.
-  const todayRawOffset = useMemo(() => {
-    // "Today" is the local calendar day, matching the local-midnight grid the
-    // task bars sit on (parseDay / rangeStart). Reading UTC date parts here
-    // instead would put the marker a day off for the width of the UTC offset
-    // every day — evening hours west of UTC, small hours east of it.
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return daysBetween(rangeStart, today);
-  }, [rangeStart]);
+  const todayRawOffset = useMemo(() => todayOffset(rangeStart, new Date()), [rangeStart]);
 
   // null when today is off the timeline — the marker and line are not drawn.
-  const todayOffset = todayRawOffset >= 0 && todayRawOffset < totalDays
+  const todayVisibleOffset = todayRawOffset >= 0 && todayRawOffset < totalDays
     ? todayRawOffset
     : null;
 
@@ -277,9 +220,9 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     </>
   );
 
-  const TodayLine = ({ height }: { height: number }) => todayOffset === null ? null : (
+  const TodayLine = ({ height }: { height: number }) => todayVisibleOffset === null ? null : (
     <div style={{
-      position: 'absolute', left: todayOffset * effectiveDayW, top: 0,
+      position: 'absolute', left: todayVisibleOffset * effectiveDayW, top: 0,
       width: 2, height,
       background: `linear-gradient(180deg, ${ACCENT}, rgba(79,142,247,0.6))`,
       boxShadow: `0 0 14px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,
@@ -395,10 +338,10 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             )}
 
             <TodayLine height={38} />
-            {todayOffset !== null && (
+            {todayVisibleOffset !== null && (
               <div style={{
                 position: 'absolute',
-                left: todayOffset * effectiveDayW - 5, top: 13,
+                left: todayVisibleOffset * effectiveDayW - 5, top: 13,
                 width: 10, height: 10, borderRadius: '50%',
                 background: ACCENT,
                 boxShadow: `0 0 12px rgba(79,142,247,0.9), 0 0 4px rgba(79,142,247,1)`,
@@ -622,10 +565,10 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
         );
       })}
 
-        {todayOffset !== null && (
+        {todayVisibleOffset !== null && (
           <div style={{
             position: 'absolute',
-            left: LABEL_W + todayOffset * effectiveDayW, top: 0, bottom: 0,
+            left: LABEL_W + todayVisibleOffset * effectiveDayW, top: 0, bottom: 0,
             width: 2,
             background: `linear-gradient(180deg, ${ACCENT}, rgba(79,142,247,0.6))`,
             boxShadow: `0 0 14px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,

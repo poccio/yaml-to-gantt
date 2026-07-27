@@ -5,6 +5,7 @@ import type { Task } from './parseYaml';
 import GanttChart from './GanttChart';
 import { DARK, LIGHT } from './themes';
 import type { Theme } from './themes';
+import { readUrlOptions } from './urlOptions';
 
 function getInitialTheme(): Theme {
   const stored = localStorage.getItem('theme');
@@ -13,19 +14,16 @@ function getInitialTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? LIGHT : DARK;
 }
 
-// Set by the CLI's --no-assignee-filter flag, carried in the URL alongside ?file=
-const hideAssigneeFilter =
-  new URLSearchParams(window.location.search).get('assigneeFilter') === 'off';
-
 export default function App() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [selectedAssignees, setSelectedAssignees] = useState<Set<string> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
-  const [filename, setFilename] = useState<string | null>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('file') || null;
-  });
+  // The CLI's flags, carried in the URL. Read on first render rather than at
+  // module scope: touching `window` on import throws outside a browser, which
+  // makes this module untestable in the suite's node environment.
+  const [{ file, hideAssigneeFilter }] = useState(() => readUrlOptions(window.location.search));
+  const [filename, setFilename] = useState<string | null>(file);
 
   useEffect(() => {
     document.documentElement.style.colorScheme = theme.colorScheme;
