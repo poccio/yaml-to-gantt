@@ -163,10 +163,12 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   // Day offset of "today" from rangeStart, uncapped — it can fall outside
   // [0, totalDays) for a roadmap that is entirely in the past or the future.
   const todayRawOffset = useMemo(() => {
-    // "Today" is the current calendar day in UTC, placed on the same
-    // local-midnight grid the task bars use (parseDay / rangeStart).
-    const now = new Date();
-    const today = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    // "Today" is the local calendar day, matching the local-midnight grid the
+    // task bars sit on (parseDay / rangeStart). Reading UTC date parts here
+    // instead would put the marker a day off for the width of the UTC offset
+    // every day — evening hours west of UTC, small hours east of it.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return daysBetween(rangeStart, today);
   }, [rangeStart]);
 
