@@ -257,8 +257,15 @@ export default function App() {
 
         {/* Chart / empty state */}
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex' }}>
-          {!tasks
-            ? <EmptyState theme={theme} onLoad={loadYaml} />
+          {/* A zero-task array is a valid parse, but it gives GanttChart no dates
+              to build a range from (Math.min of nothing is Infinity), so keep it
+              out of the chart entirely rather than rendering NaN geometry. */}
+          {!tasks || tasks.length === 0
+            ? <EmptyState
+                theme={theme}
+                onLoad={loadYaml}
+                message={tasks ? 'No tasks in this file yet — add one to see the chart' : undefined}
+              />
             : <GanttChart tasks={tasks} selectedAssignees={selectedAssignees} theme={theme} />}
         </div>
       </div>
@@ -278,9 +285,11 @@ const GHOST_BARS = [
 interface EmptyStateProps {
   onLoad: (text: string, name?: string) => void;
   theme: Theme;
+  /** Idle text. The drag-over text is always "Drop to load". */
+  message?: string;
 }
 
-function EmptyState({ onLoad, theme }: EmptyStateProps) {
+function EmptyState({ onLoad, theme, message = 'Drop a YAML file to begin' }: EmptyStateProps) {
   const [dragging, setDragging] = useState(false);
 
   const handleDrop = (e: DragEvent) => {
@@ -342,7 +351,7 @@ function EmptyState({ onLoad, theme }: EmptyStateProps) {
           fontFamily: "'Plus Jakarta Sans', sans-serif",
           transition: 'color 0.15s',
         }}>
-          {dragging ? 'Drop to load' : 'Drop a YAML file to begin'}
+          {dragging ? 'Drop to load' : message}
         </span>
       </div>
     </div>
