@@ -9,6 +9,9 @@ const ROW_H = 52;
 const PROJ_H = 54;
 const HDR_H = 68;
 const RANGE_PAD = 4;
+// Days of past context shown to the left of "today" on first render. Roughly a
+// quarter of a typical viewport, so the rest is spent on upcoming work.
+const TODAY_LEAD_IN = 7;
 
 const PROJECT_COLORS = [
   '#60a5fa', '#34d399', '#f472b6', '#fb923c',
@@ -157,14 +160,20 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     return ticks;
   }, [rangeStart, totalDays]);
 
-  const todayOffset = useMemo(() => {
+  // Day offset of "today" from rangeStart, uncapped — it can fall outside
+  // [0, totalDays) for a roadmap that is entirely in the past or the future.
+  const todayRawOffset = useMemo(() => {
     // "Today" is the current calendar day in UTC, placed on the same
     // local-midnight grid the task bars use (parseDay / rangeStart).
     const now = new Date();
     const today = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    const off = daysBetween(rangeStart, today);
-    return off >= 0 && off < totalDays ? off : null;
-  }, [rangeStart, totalDays]);
+    return daysBetween(rangeStart, today);
+  }, [rangeStart]);
+
+  // null when today is off the timeline — the marker and line are not drawn.
+  const todayOffset = todayRawOffset >= 0 && todayRawOffset < totalDays
+    ? todayRawOffset
+    : null;
 
   const projects = useMemo((): Project[] => {
     const names = [...new Set(tasks.map(t => t.project))];
@@ -183,6 +192,24 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   const effectiveDayW = containerWidth > 0
     ? Math.max(DAY_W, (containerWidth - LABEL_W) / totalDays)
     : DAY_W;
+
+  // Open focused on today, not on the start of the roadmap. Mount-only: an SSE
+  // hot-reload of the YAML must not yank the scroll position out from under
+  // whatever the user was looking at.
+  //
+  // The browser clamps scrollLeft to [0, scrollWidth - clientWidth], which
+  // handles both out-of-range cases for free: a future-only roadmap stays at
+  // the left edge, a fully-past one lands at the right showing the tail. When
+  // the timeline is short enough to fit, there is nothing to scroll and this
+  // is a no-op.
+  useLayoutEffect(() => {
+    // containerWidth is still 0 here (ResizeObserver has not fired), so
+    // effectiveDayW is DAY_W — which is exactly the width used whenever the
+    // timeline actually overflows, i.e. whenever this scroll does anything.
+    if (containerRef.current) {
+      containerRef.current.scrollLeft = (todayRawOffset - TODAY_LEAD_IN) * DAY_W;
+    }
+  }, []);
 
   const weekGrid = {
     backgroundImage: `
