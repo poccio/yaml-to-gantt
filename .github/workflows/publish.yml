@@ -41,6 +41,6 @@ jobs:
           npm pkg set version="$VERSION"   # pnpm has no `pkg` command
           echo "Publishing version $VERSION"
 
+      # Auth is npm trusted publishing over OIDC (see `id-token: write` above) —
+      # no NPM_TOKEN secret involved.
       - run: pnpm publish --no-git-checks --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
