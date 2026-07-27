@@ -78,6 +78,19 @@ them from `URLSearchParams` at module init. A client that navigates to a bare
 `http://localhost:3847/` therefore gets defaults — the same tradeoff `?file=`
 already carries for the displayed filename.
 
+## Releasing
+
+`package.json` holds a permanent `"version": "0.0.0"` placeholder — **do not bump
+it**. The git tag is the source of truth. Publishing a release (GitHub release
+on tag `vX.Y.Z`) triggers `.github/workflows/publish.yml`, which strips the `v`
+and runs `pnpm pkg set version=X.Y.Z` before `pnpm publish`, so the tarball
+carries the real version while the repo never drifts. A tag that isn't
+`vMAJOR.MINOR.PATCH` fails the job rather than publishing something wrong.
+
+Consequence: a local `pnpm pack` produces `0.0.0`. Nothing reads the version at
+runtime today; if a `--version` flag is ever added, it must read from the
+*packed* `package.json`, not assume the checked-in value is meaningful.
+
 ## Theming
 
 The app supports dark and light themes. The active theme is a plain object passed as a prop from `App` → `GanttChart` / `EmptyState` / `Pill`. All color tokens live in `src/themes.ts` — do not hardcode hex values in components.

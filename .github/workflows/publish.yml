@@ -26,6 +26,21 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # package.json ships a 0.0.0 placeholder — the release tag is the source
+      # of truth. Stamp after install so --frozen-lockfile sees the committed
+      # manifest, and before publish so the tarball carries the real version.
+      - name: Stamp version from release tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag '$TAG' is not vMAJOR.MINOR.PATCH — refusing to publish"
+            exit 1
+          fi
+          npm pkg set version="$VERSION"   # pnpm has no `pkg` command
+          echo "Publishing version $VERSION"
+
       - run: pnpm publish --no-git-checks --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
