@@ -8,6 +8,12 @@ permissions:
   id-token: write
   contents: read
 
+# Serialize publishes to avoid races beteen multiple
+# minute-close releases
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
