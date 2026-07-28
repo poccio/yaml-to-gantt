@@ -4,27 +4,23 @@ import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import { start } from '../server/index.js';
+import { parseCliArgs, USAGE } from './cliArgs.js';
 
-const args = process.argv.slice(2);
-const noOpen = args.includes('--no-open');
-const noAssigneeFilter = args.includes('--no-assignee-filter');
-const filePath = args.find((a) => !a.startsWith('--'));
+const command = parseCliArgs(process.argv.slice(2));
 
-if (!filePath) {
-  console.log('Usage: yaml-to-gantt <file.yaml> [options]');
-  console.log('');
-  console.log('  Visualize a YAML roadmap as an interactive Gantt chart.');
-  console.log('');
-  console.log('Options:');
-  console.log('  --no-open              Start the server without opening a browser');
-  console.log('  --no-assignee-filter   Hide the assignee filter row to save vertical space');
-  console.log('');
-  console.log('Example:');
-  console.log('  npx yaml-to-gantt roadmap.yaml');
+if (command.kind === 'error') {
+  console.error(`Error: ${command.message}`);
+  console.error(`Run 'yaml-to-gantt --help' for usage.`);
   process.exit(1);
 }
 
-const absPath = resolve(filePath);
+if (command.kind === 'usage') {
+  console.log(USAGE);
+  process.exit(command.exitCode);
+}
+
+const { file, noOpen, noAssigneeFilter } = command;
+const absPath = resolve(file);
 
 if (!existsSync(absPath)) {
   console.error(`Error: file not found: ${absPath}`);
