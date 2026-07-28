@@ -87,12 +87,39 @@ describe('computeRange', () => {
     expect(withoutBaseline.rangeStart.getTime()).toBe(new Date(2026, 6, 6).getTime());
   });
 
-  // Mar 8 2026 is a 23-hour day in New York. Truncating instead of rounding the
-  // elapsed-millisecond division swallows it and the grid comes up a day short.
+  // Mar 8 2026 is a 23-hour day in New York and Nov 1 a 25-hour one. Every
+  // width and offset here counts calendar days, which is why they all go
+  // through `daysBetween`: it re-pins both ends to UTC midnight, where a day
+  // really is 24 hours, so nothing has to be rounded back into shape.
+  // Elapsed-millisecond arithmetic that truncates comes up a day short across
+  // the spring transition — the March cell reports 20 days instead of 21, and
+  // the grid loses a day. Month widths are asserted separately from totalDays
+  // because the month loop does its own arithmetic and a mutant can bypass
+  // `daysBetween` there alone.
+  //
+  // A naive-ms `Math.round` survives this test: rounding absorbs the missing
+  // hour. The `todayOffset` tests are what catch that one.
   test('spans a DST transition without losing a day', () => {
-    const { totalDays } = computeRange([task({ start: '2026-03-01', end: '2026-03-15' })]);
+    const spring = computeRange([task({ start: '2026-03-01', end: '2026-03-15' })]);
 
-    expect(totalDays).toBe(25);
+    expect(spring.totalDays).toBe(25);
+    // rangeStart is Wed Feb 25 2026, rangeEnd Sat Mar 21: 4 days of February,
+    // then 21 of March spanning the spring-forward day.
+    expect(spring.months.map((m) => [m.offset, m.width])).toEqual([
+      [0, 4],
+      [4, 21],
+    ]);
+
+    const fall = computeRange([task({ start: '2026-10-15', end: '2026-12-05' })]);
+
+    expect(fall.totalDays).toBe(62);
+    // rangeStart is Sun Oct 11 2026, rangeEnd Fri Dec 11: 21 days of October,
+    // all of November spanning the fall-back day, then 11 of December.
+    expect(fall.months.map((m) => [m.offset, m.width])).toEqual([
+      [0, 21],
+      [21, 30],
+      [51, 11],
+    ]);
   });
 
   // The week gridlines are a repeating gradient offset by this value; get it
@@ -121,6 +148,23 @@ describe('computeRange', () => {
       [4, 31],
       [35, 31],
       [66, 21],
+    ]);
+  });
+
+  // The trailing pad can push rangeEnd one day into the next month, leaving a
+  // one-day-wide cell. It still has to be drawn: dropping it (`if (w < 2)
+  // continue`, or any other tidying of the sliver) leaves the last day of the
+  // grid under no month header at all, and the tiling assertion above cannot
+  // see it because none of its cells are that narrow.
+  test('keeps a month cell only one day wide', () => {
+    const { totalDays, months } = computeRange([task({ start: '2026-07-10', end: '2026-07-26' })]);
+
+    // rangeStart is Mon Jul 6 2026, rangeEnd Sat Aug 1 — so all 26 remaining
+    // days of July, then August's single day.
+    expect(totalDays).toBe(27);
+    expect(months.map((m) => [m.label, m.offset, m.width])).toEqual([
+      ['July 2026', 0, 26],
+      ['August 2026', 26, 1],
     ]);
   });
 
