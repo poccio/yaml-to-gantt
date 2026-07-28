@@ -50,15 +50,15 @@ describe('server', () => {
     if (tmpFile) try { fs.unlinkSync(tmpFile); } catch {}
   });
 
-  function createTmpYaml(content: string): string {
-    tmpFile = path.join(os.tmpdir(), `yaml-to-gantt-test-${Date.now()}.yaml`);
+  function createTmpYaml(content: string, name?: string): string {
+    tmpFile = path.join(os.tmpdir(), name ?? `yaml-to-gantt-test-${Date.now()}.yaml`);
     fs.writeFileSync(tmpFile, content);
     return tmpFile;
   }
 
   /** Serves `content` on an ephemeral port; returns the origin to fetch from. */
-  async function serve(content: string): Promise<string> {
-    server = await start(createTmpYaml(content), { port: 0, distDir });
+  async function serve(content: string, name?: string): Promise<string> {
+    server = await start(createTmpYaml(content, name), { port: 0, distDir });
     const { port } = server.address() as { port: number };
     return `http://localhost:${port}`;
   }
@@ -83,6 +83,18 @@ describe('server', () => {
     // Refetched on every SSE reload with a plain fetch(), so a cached copy would
     // replay the file the client was just told had changed.
     expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('names the file it is serving on /api/yaml', async () => {
+    // The header is the only place the client can learn the name when the page
+    // was opened bare at localhost/, without the ?file= the CLI puts in the URL.
+    // Percent-encoded because Node writes header values as latin1 and would
+    // mangle any path outside that range — hence the accent in the fixture.
+    const origin = await serve('projects: {}', 'yaml-to-gantt-tëst piano.yaml');
+
+    const res = await fetchUrl(`${origin}/api/yaml`);
+    expect(res.headers['x-yaml-path']).toBe(encodeURIComponent(tmpFile!));
+    expect(decodeURIComponent(res.headers['x-yaml-path'] as string)).toBe(tmpFile);
   });
 
   it('revalidates index.html and lets hashed assets be cached hard', async () => {

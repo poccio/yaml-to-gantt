@@ -48,14 +48,21 @@ export default function App() {
   };
 
   useEffect(() => {
-    const fetchYaml = () =>
-      fetch('/api/yaml')
-        .then((r) => {
-          if (!r.ok || (r.headers.get('content-type') ?? '').includes('text/html')) return;
-          return r.text();
-        })
-        .then((text) => text && loadYaml(text))
-        .catch(() => { });
+    const fetchYaml = async () => {
+      try {
+        const r = await fetch('/api/yaml');
+        if (!r.ok || (r.headers.get('content-type') ?? '').includes('text/html')) return;
+        // `file` is authoritative when it is there, but it is absent whenever the
+        // page was opened bare at localhost/ rather than through the URL the CLI
+        // prints. The response says which file the server is actually watching,
+        // which is the same answer and always available.
+        const served = r.headers.get('X-Yaml-Path');
+        const text = await r.text();
+        if (text) loadYaml(text, file ?? (served ? decodeURIComponent(served) : undefined));
+      } catch {
+        // No server behind the page — the drop zone is still a way in.
+      }
+    };
 
     fetchYaml();
     const events = new EventSource('/api/events');

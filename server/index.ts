@@ -81,6 +81,12 @@ export function start(
         // The client refetches this on every SSE reload with a plain fetch(), so
         // a cached copy would replay the file it was just told had changed.
         'Cache-Control': 'no-store',
+        // Which file this content came from. The client normally reads the name
+        // off the `?file=` the CLI builds, but that is gone the moment someone
+        // opens localhost/ by hand — and only the server knows the answer.
+        // Percent-encoded: Node writes header values as latin1, so an accented
+        // or non-Latin path would arrive mangled.
+        'X-Yaml-Path': encodeURIComponent(yamlPath),
       });
       res.end(content);
       return;
