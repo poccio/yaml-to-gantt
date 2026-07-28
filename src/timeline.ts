@@ -132,3 +132,15 @@ export function scrollShiftDays(prev: Date, next: Date): number {
 export function todayOffset(rangeStart: Date, now: Date): number {
   return daysBetween(rangeStart, now);
 }
+
+/**
+ * Whether `tasks` can produce a grid at all.
+ *
+ * `computeRange` takes `Math.min` over the task dates, which is `Infinity` for
+ * an empty list — so an empty roadmap yields an Invalid Date origin and a NaN
+ * width, and renders as a chart with no bars and no day columns rather than as
+ * an error. Callers show an empty state instead.
+ */
+export function hasChartableRange(tasks: Task[]): boolean {
+  return tasks.length > 0;
+}

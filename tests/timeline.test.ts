@@ -1,5 +1,12 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { addDays, computeRange, parseDay, scrollShiftDays, todayOffset } from '../src/timeline';
+import {
+  addDays,
+  computeRange,
+  hasChartableRange,
+  parseDay,
+  scrollShiftDays,
+  todayOffset,
+} from '../src/timeline';
 import type { Task } from '../src/parseYaml';
 
 // Every expectation here is hand-derived in this one zone. It is deliberately
@@ -240,5 +247,19 @@ describe('todayOffset', () => {
 
     expect(todayOffset(rangeStart, new Date(2026, 5, 20, 12, 0))).toBe(-11);
     expect(todayOffset(rangeStart, new Date(2026, 8, 1, 12, 0))).toBe(62);
+  });
+});
+
+describe('hasChartableRange', () => {
+  // computeRange derives its origin from Math.min over the task dates, which
+  // is Infinity for an empty list — rangeStart Invalid Date, totalDays NaN,
+  // and a chart of zero bars and zero day columns with no error anywhere.
+  // App renders the empty state instead, and this is that decision.
+  test('rejects a roadmap with no tasks', () => {
+    expect(hasChartableRange([])).toBe(false);
+  });
+
+  test('accepts a roadmap with at least one task', () => {
+    expect(hasChartableRange([task()])).toBe(true);
   });
 });

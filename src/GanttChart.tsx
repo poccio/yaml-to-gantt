@@ -2,10 +2,11 @@ import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } f
 import type { JSX } from 'preact';
 import type { Task } from './parseYaml';
 import type { Theme } from './themes';
-import { addDays, computeRange, daysBetween, parseDay, scrollShiftDays, todayOffset } from './timeline';
+import { addDays, computeRange, scrollShiftDays, todayOffset } from './timeline';
+import { CARET_SIZE, POPOVER_W, placePopover } from './popover';
+import type { PopoverPos } from './popover';
+import { DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, taskBarGeometry } from './chartLayout';
 
-const DAY_W = 40;
-const LABEL_W = 280;
 const ROW_H = 52;
 const PROJ_H = 54;
 const HDR_H = 68;
@@ -19,10 +20,6 @@ const PROJECT_COLORS = [
 ];
 
 const ACCENT = '#4f8ef7';
-const POPOVER_W = 320;
-const POP_CARET = 7;
-const POP_GAP = 10;
-const POP_MARGIN = 8;
 
 function hexRgb(hex: string): string {
   return [
@@ -134,9 +131,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     task.assignees.some(a => selectedAssignees.has(a));
 
   const timelineMinW = totalDays * DAY_W;
-  const effectiveDayW = containerWidth > 0
-    ? Math.max(DAY_W, (containerWidth - LABEL_W) / totalDays)
-    : DAY_W;
+  const dayW = effectiveDayW(containerWidth, totalDays);
 
   // Open focused on today, not on the start of the roadmap. Once-only: an SSE
   // hot-reload of the YAML must not yank the scroll position out from under
@@ -159,7 +154,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (hasFocusedToday.current || !container || container.clientWidth === 0) return;
-    // DAY_W, not effectiveDayW: the two differ only when the timeline fits the
+    // DAY_W, not dayW: the two differ only when the timeline fits the
     // container, and then there is nothing to scroll anyway.
     container.scrollLeft = (todayRawOffset - TODAY_LEAD_IN) * DAY_W;
     hasFocusedToday.current = true;
@@ -178,7 +173,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     const container = containerRef.current;
     const shift = scrollShiftDays(prevRangeStart.current, rangeStart);
     prevRangeStart.current = rangeStart;
-    // DAY_W for the same reason as above: where effectiveDayW differs, the
+    // DAY_W for the same reason as above: where dayW differs, the
     // timeline fits the container and there is nothing to scroll.
     if (container && hasFocusedToday.current && shift !== 0) {
       container.scrollLeft += shift * DAY_W;
@@ -192,30 +187,32 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
         ${theme.weekLineAlpha} 0px,
         ${theme.weekLineAlpha} 1px,
         transparent 1px,
-        transparent ${7 * effectiveDayW}px
+        transparent ${7 * dayW}px
       ),
       repeating-linear-gradient(
         90deg,
         ${theme.weekBandAlpha} 0px,
-        ${theme.weekBandAlpha} ${7 * effectiveDayW}px,
-        transparent ${7 * effectiveDayW}px,
-        transparent ${14 * effectiveDayW}px
+        ${theme.weekBandAlpha} ${7 * dayW}px,
+        transparent ${7 * dayW}px,
+        transparent ${14 * dayW}px
       )
     `,
     backgroundPosition: `
-      ${firstMondayOffset * effectiveDayW}px 0,
-      ${firstMondayOffset * effectiveDayW}px 0
+      ${firstMondayOffset * dayW}px 0,
+      ${firstMondayOffset * dayW}px 0
     `,
   };
 
   const handleMouseMove = (e: JSX.TargetedMouseEvent<HTMLDivElement>) => {
     const container = containerRef.current;
     if (!container) return;
-    const rect = container.getBoundingClientRect();
-    const xInTimeline = e.clientX - rect.left - LABEL_W + container.scrollLeft;
-    if (xInTimeline < 0) { setHoverOffset(null); return; }
-    const off = Math.floor(xInTimeline / effectiveDayW);
-    setHoverOffset(off >= 0 && off < totalDays ? off : null);
+    setHoverOffset(hoverOffsetAt({
+      clientX: e.clientX,
+      containerLeft: container.getBoundingClientRect().left,
+      scrollLeft: container.scrollLeft,
+      dayW,
+      totalDays,
+    }));
   };
 
   const hoverDate = hoverOffset !== null
@@ -226,13 +223,13 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   const Crosshair = ({ height }: { height: number }) => hoverOffset === null ? null : (
     <>
       <div style={{
-        position: 'absolute', left: hoverOffset * effectiveDayW, top: 0,
-        width: effectiveDayW, height,
+        position: 'absolute', left: hoverOffset * dayW, top: 0,
+        width: dayW, height,
         background: 'rgba(79,142,247,0.06)',
         zIndex: 1, pointerEvents: 'none',
       }} />
       <div style={{
-        position: 'absolute', left: hoverOffset * effectiveDayW, top: 0,
+        position: 'absolute', left: hoverOffset * dayW, top: 0,
         width: 1, height,
         background: 'rgba(79,142,247,0.22)',
         zIndex: 3, pointerEvents: 'none',
@@ -242,7 +239,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
 
   const TodayLine = ({ height }: { height: number }) => todayVisibleOffset === null ? null : (
     <div style={{
-      position: 'absolute', left: todayVisibleOffset * effectiveDayW, top: 0,
+      position: 'absolute', left: todayVisibleOffset * dayW, top: 0,
       width: 2, height,
       background: `linear-gradient(180deg, ${ACCENT}, rgba(79,142,247,0.6))`,
       boxShadow: `0 0 14px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,
@@ -298,7 +295,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             {months.map((m, i) => (
               <div key={i} style={{
                 position: 'absolute',
-                left: m.offset * effectiveDayW, width: m.width * effectiveDayW, height: 30,
+                left: m.offset * dayW, width: m.width * dayW, height: 30,
                 display: 'flex', alignItems: 'center', paddingLeft: 12,
                 fontSize: 13, fontWeight: 600, letterSpacing: '0.1em',
                 textTransform: 'uppercase', color: theme.monthLabel,
@@ -316,7 +313,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             {dayTicks.map((d) => (
               <div key={d.offset} style={{
                 position: 'absolute',
-                left: d.offset * effectiveDayW, width: effectiveDayW, height: 38,
+                left: d.offset * dayW, width: dayW, height: 38,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 13,
                 fontFamily: "'JetBrains Mono', monospace",
@@ -332,8 +329,8 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             {hoverOffset !== null && (
               <div style={{
                 position: 'absolute',
-                left: hoverOffset * effectiveDayW, top: 0,
-                width: effectiveDayW, height: 38,
+                left: hoverOffset * dayW, top: 0,
+                width: dayW, height: 38,
                 background: 'rgba(79,142,247,0.08)',
                 borderRadius: 2, zIndex: 2, pointerEvents: 'none',
               }} />
@@ -343,7 +340,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             {hoverDate && (
               <div style={{
                 position: 'absolute',
-                left: hoverOffset! * effectiveDayW + effectiveDayW / 2,
+                left: hoverOffset! * dayW + dayW / 2,
                 top: '50%', transform: 'translate(-50%, -50%)',
                 background: ACCENT, color: '#ffffff',
                 fontSize: 13, lineHeight: 1,
@@ -361,7 +358,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             {todayVisibleOffset !== null && (
               <div style={{
                 position: 'absolute',
-                left: todayVisibleOffset * effectiveDayW - 5, top: 13,
+                left: todayVisibleOffset * dayW - 5, top: 13,
                 width: 10, height: 10, borderRadius: '50%',
                 background: ACCENT,
                 boxShadow: `0 0 12px rgba(79,142,247,0.9), 0 0 4px rgba(79,142,247,1)`,
@@ -424,27 +421,15 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
 
             {/* Task rows */}
             {visibleTasks.map(task => {
-              const startOff = daysBetween(rangeStart, parseDay(task.start));
-              const endOff = daysBetween(rangeStart, parseDay(task.end));
-              const barLeft = startOff * effectiveDayW;
-              const barW = Math.max((endOff - startOff + 1) * effectiveDayW, 8);
-              const hasBaseline = !!task.originallyPlannedStart && !!task.originallyPlannedEnd;
-              const baseStartOff = hasBaseline ? daysBetween(rangeStart, parseDay(task.originallyPlannedStart!)) : 0;
-              const baseEndOff = hasBaseline ? daysBetween(rangeStart, parseDay(task.originallyPlannedEnd!)) : 0;
-              const ghostLeft = baseStartOff * effectiveDayW;
-              const ghostW = hasBaseline ? Math.max((baseEndOff - baseStartOff + 1) * effectiveDayW, 8) : 0;
+              const geo = taskBarGeometry(task, rangeStart, dayW);
               const isHl = !!selectedAssignees && task.assignees.some(a => selectedAssignees.has(a));
               const rowId = `${proj.name}::${task.name}`;
               const isRowHovered = hoveredRow === rowId;
 
-              const approxChipW =
-                task.assignees.reduce((s, a) => s + a.length * 6.2 + 12, 0) +
-                Math.max(0, task.assignees.length - 1) * 3;
-              const chipAtRight = barLeft + barW + 6;
-              const chipX =
-                chipAtRight + approxChipW > totalDays * effectiveDayW - 4 && barLeft > approxChipW + 8
-                  ? barLeft - approxChipW - 6
-                  : chipAtRight;
+              const chipLeft = chipX({
+                barLeft: geo.barLeft, barW: geo.barW,
+                assignees: task.assignees, totalDays, dayW,
+              });
 
               return (
                 <div
@@ -527,11 +512,11 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
 
                     {/* Baseline ghost (original plan). The live bar overshooting this
                         outline — or sitting right of it — is what communicates the slip. */}
-                    {hasBaseline && (
+                    {geo.ghost && (
                       <div style={{
                         position: 'absolute',
-                        left: ghostLeft, top: '50%', transform: 'translateY(-50%)',
-                        width: ghostW, height: 26, // taller than the live bar so the ghost frames it above/below
+                        left: geo.ghost.left, top: '50%', transform: 'translateY(-50%)',
+                        width: geo.ghost.width, height: 26, // taller than the live bar so the ghost frames it above/below
                         borderRadius: 6,
                         background: theme.ghostFill,
                         border: `1.5px dashed ${theme.ghostBorder}`,
@@ -544,8 +529,8 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                     {/* Live bar */}
                     <div style={{
                       position: 'absolute',
-                      left: barLeft, top: '50%', transform: 'translateY(-50%)',
-                      width: barW, height: 18, borderRadius: 5,
+                      left: geo.barLeft, top: '50%', transform: 'translateY(-50%)',
+                      width: geo.barW, height: 18, borderRadius: 5,
                       background: `linear-gradient(180deg, ${proj.color} 0%, ${proj.color}cc 100%)`,
                       boxShadow: `0 2px 8px rgba(${rgb},0.3), 0 0 0 0.5px rgba(${rgb},0.2)`,
                       opacity: selectedAssignees && !isHl && !isRowHovered ? 0.15 : 1,
@@ -556,7 +541,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                     {/* Assignee chips */}
                     {task.assignees.length > 0 && (
                       <div style={{
-                        position: 'absolute', left: chipX,
+                        position: 'absolute', left: chipLeft,
                         top: '50%', transform: 'translateY(-50%)',
                         display: 'flex', gap: 3,
                         zIndex: 3, pointerEvents: 'none',
@@ -588,7 +573,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
         {todayVisibleOffset !== null && (
           <div style={{
             position: 'absolute',
-            left: LABEL_W + todayVisibleOffset * effectiveDayW, top: 0, bottom: 0,
+            left: LABEL_W + todayVisibleOffset * dayW, top: 0, bottom: 0,
             width: 2,
             background: `linear-gradient(180deg, ${ACCENT}, rgba(79,142,247,0.6))`,
             boxShadow: `0 0 14px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,
@@ -622,13 +607,6 @@ interface TaskInfoPopoverProps {
   onHoverLeave: () => void;
 }
 
-interface PopoverPos {
-  top: number;
-  left: number;
-  caretLeft: number;
-  placement: 'above' | 'below';
-}
-
 function TaskInfoPopover({ task, anchorRect, theme, onClose, onHoverEnter, onHoverLeave }: TaskInfoPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<PopoverPos | null>(null);
@@ -636,30 +614,10 @@ function TaskInfoPopover({ task, anchorRect, theme, onClose, onHoverEnter, onHov
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const h = el.offsetHeight;
-    const anchorCenterX = anchorRect.left + anchorRect.width / 2;
-
-    let left = anchorCenterX - POPOVER_W / 2;
-    left = Math.max(POP_MARGIN, Math.min(left, window.innerWidth - POPOVER_W - POP_MARGIN));
-
-    const spaceBelow = window.innerHeight - anchorRect.bottom;
-    let placement: 'above' | 'below';
-    let top: number;
-    if (spaceBelow >= h + POP_GAP + POP_MARGIN) {
-      placement = 'below';
-      top = anchorRect.bottom + POP_GAP;
-    } else if (anchorRect.top >= h + POP_GAP + POP_MARGIN) {
-      placement = 'above';
-      top = anchorRect.top - POP_GAP - h;
-    } else {
-      placement = 'below';
-      top = Math.max(POP_MARGIN, window.innerHeight - h - POP_MARGIN);
-    }
-
-    let caretLeft = anchorCenterX - left;
-    caretLeft = Math.max(16, Math.min(caretLeft, POPOVER_W - 16));
-
-    setPos({ top, left, caretLeft, placement });
+    setPos(placePopover(anchorRect, el.offsetHeight, {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }));
   }, [anchorRect]);
 
   useEffect(() => {
@@ -705,10 +663,10 @@ function TaskInfoPopover({ task, anchorRect, theme, onClose, onHoverEnter, onHov
       {pos && (
         <div style={{
           position: 'absolute',
-          left: pos.caretLeft - POP_CARET,
-          ...(pos.placement === 'below' ? { top: -POP_CARET } : { bottom: -POP_CARET }),
-          width: POP_CARET * 2,
-          height: POP_CARET * 2,
+          left: pos.caretLeft - CARET_SIZE,
+          ...(pos.placement === 'below' ? { top: -CARET_SIZE } : { bottom: -CARET_SIZE }),
+          width: CARET_SIZE * 2,
+          height: CARET_SIZE * 2,
           background: theme.raised,
           borderLeft: `1px solid ${theme.border}`,
           borderTop: `1px solid ${theme.border}`,

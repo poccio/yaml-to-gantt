@@ -6,6 +6,7 @@ import GanttChart from './GanttChart';
 import { DARK, LIGHT } from './themes';
 import type { Theme } from './themes';
 import { readUrlOptions } from './urlOptions';
+import { hasChartableRange } from './timeline';
 
 function getInitialTheme(): Theme {
   const stored = localStorage.getItem('theme');
@@ -258,7 +259,7 @@ export default function App() {
           {/* A zero-task array is a valid parse, but it gives GanttChart no dates
               to build a range from (Math.min of nothing is Infinity), so keep it
               out of the chart entirely rather than rendering NaN geometry. */}
-          {!tasks || tasks.length === 0
+          {!tasks || !hasChartableRange(tasks)
             ? <EmptyState
                 theme={theme}
                 onLoad={loadYaml}
