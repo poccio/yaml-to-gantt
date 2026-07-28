@@ -1,23 +1,16 @@
 /**
- * Placement geometry for the task-description popover.
- *
- * Deliberately free of the DOM: it takes a structural anchor rect and an
- * explicit viewport rather than reading `window`, so it is a total function of
- * its arguments and testable in the node suite. jsdom would be no help here
- * anyway — it has no layout engine, so a real rect measured under it is all
- * zeroes.
+ * Placement geometry for the task-description popover. Takes an anchor rect and
+ * an explicit viewport rather than reading `window`, so it is testable in the
+ * node suite — jsdom would not help, having no layout engine to measure with.
  */
 
 export const POPOVER_W = 320;
-/**
- * Half the caret square's edge. Placement never reads it — the caret is drawn
- * by the component's CSS — but it belongs with the other popover dimensions.
- */
-export const CARET_SIZE = 7;
+/** Drawn by the component; placement never reads it. */
+export const CARET_HALF_EDGE = 7;
 const POP_GAP = 10;
 const POP_MARGIN = 8;
 
-/** The structural subset of `DOMRect` that placement actually reads. */
+/** The subset of `DOMRect` placement reads, so a test needs no real rect. */
 export interface AnchorRect {
   top: number;
   bottom: number;
@@ -53,14 +46,14 @@ export function placePopover(
     placement = 'above';
     top = anchor.top - POP_GAP - height;
   } else {
-    // Taller than either gap. Pin to the bottom margin rather than let it run
-    // off the top with a negative `top`.
+    // Taller than either gap: pin to the bottom margin rather than run off the
+    // top at a negative `top`.
     placement = 'below';
     top = Math.max(POP_MARGIN, viewport.height - height - POP_MARGIN);
   }
 
-  // Once the box stops following the anchor (clamped above), the caret keeps
-  // pointing at it — up to its own inset from the box's rounded corners.
+  // Where the box was clamped it no longer follows the anchor, so the caret does
+  // — up to its own inset, which keeps it clear of the rounded corners.
   let caretLeft = anchorCenterX - left;
   caretLeft = Math.max(16, Math.min(caretLeft, POPOVER_W - 16));
 

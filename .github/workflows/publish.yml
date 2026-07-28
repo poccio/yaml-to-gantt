@@ -8,8 +8,7 @@ permissions:
   id-token: write
   contents: read
 
-# Serialize publishes to avoid races beteen multiple
-# minute-close releases
+# Serialize, so two releases cut minutes apart cannot race each other
 concurrency:
   group: publish-npm
   cancel-in-progress: false
@@ -20,9 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # No `version:` — the pnpm version comes from package.json's
-      # `packageManager` field, so CI and local dev cannot drift apart.
-      # action-setup v4+ errors if both are set and disagree.
+      # No `version:` — the pin lives in package.json's `packageManager`
       - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v7
@@ -33,14 +30,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Validate.yml runs on pull_request only, and releases are cut from direct
-      # pushes to main, so this is the final authoritative release gate
       - run: pnpm typecheck
       - run: pnpm test
 
       # package.json ships a 0.0.0 placeholder — the release tag is the source
-      # of truth. Stamp after install so --frozen-lockfile sees the committed
-      # manifest, and before publish so the tarball carries the real version.
+      # of truth, so the tarball only gets a real version from this step
       - name: Stamp version from release tag
         env:
           TAG: ${{ github.event.release.tag_name }}
@@ -53,6 +47,5 @@ jobs:
           npm pkg set version="$VERSION"   # pnpm has no `pkg` command
           echo "Publishing version $VERSION"
 
-      # Auth is npm trusted publishing over OIDC (see `id-token: write` above) —
-      # no NPM_TOKEN secret involved.
+      # Auth is npm trusted publishing over OIDC (`id-token: write` above)
       - run: pnpm publish --no-git-checks --provenance

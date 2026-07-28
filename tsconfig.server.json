@@ -1,7 +1,7 @@
 {
   // The CLI and HTTP server, run by node directly — so `nodenext`, which is
-  // node's own ESM resolution and requires explicit `.js` extensions on
-  // relative imports. This is the config that emits the shipped JS.
+  // node's own resolution and wants explicit `.js` on relative imports. This is
+  // the config that emits the shipped JS.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "module": "NodeNext",
@@ -10,10 +10,9 @@
     "outDir": ".build-server",
     "rootDir": ".",
 
-    // Referenced by tsconfig.test.json so the test project consumes these
-    // declarations instead of re-checking this source under bundler rules.
-    // Declarations live outside outDir because `build:server` deletes
-    // `.build-server` after copying the JS out.
+    // tsconfig.test.json consumes these declarations instead of re-checking
+    // this source under bundler rules. They live outside outDir because
+    // `build:server` deletes `.build-server` after copying the JS out.
     "composite": true,
     "declaration": true,
     "declarationDir": ".tsbuild/node",

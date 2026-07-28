@@ -15,16 +15,13 @@ export const USAGE = [
 ].join('\n');
 
 /**
- * What the argv asks the CLI to do. Returned rather than acted on, so the whole
- * parse stays pure and reachable from the node test suite — `bin/cli.ts` itself
- * cannot be imported by a test (it binds a socket and shells out to a browser).
+ * Returned rather than acted on so the parse stays testable — `bin/cli.ts` binds
+ * a socket and shells out to a browser at module scope, so no test can import it.
  */
 export type CliCommand =
-  /** Serve `file`. */
   | { kind: 'run'; file: string; noOpen: boolean; noAssigneeFilter: boolean }
-  /** Print USAGE and exit with this code: 0 when asked for, 1 when no file was given. */
+  /** 0 when usage was asked for, 1 when no file was given. */
   | { kind: 'usage'; exitCode: 0 | 1 }
-  /** Print the message and exit 1. */
   | { kind: 'error'; message: string };
 
 const OPTIONS = {
@@ -38,10 +35,9 @@ export function parseCliArgs(argv: string[]): CliCommand {
   try {
     ({ values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true }));
   } catch (err) {
-    // parseArgs rejects unknown options, bad short groups and values passed to
-    // boolean flags. Every message ends with a paragraph about escaping
-    // positionals after `--`; keep the first sentence and match the lowercase
-    // "Error: …" style of the file checks in cli.ts.
+    // parseArgs appends a paragraph about escaping positionals after `--` to
+    // every message. Keep the first sentence only, lowercased to match the
+    // wording of the file checks in cli.ts.
     const raw = err instanceof Error ? err.message.split('. ')[0] : String(err);
     return { kind: 'error', message: raw.charAt(0).toLowerCase() + raw.slice(1) };
   }

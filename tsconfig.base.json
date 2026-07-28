@@ -1,6 +1,5 @@
 {
-  // Shared strictness. Every per-runtime config extends this, so these options
-  // cannot drift apart between the browser, node and test projects.
+  // Extended by every per-runtime config, so these cannot drift apart.
   "compilerOptions": {
     "target": "ES2022",
     "strict": true,

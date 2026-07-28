@@ -1,7 +1,7 @@
 import type { Task } from './parseYaml';
 
-// Blank days of context on either side of the roadmap, so the first and last
-// bars are not flush against the edge of the grid.
+// Blank days of context on either side, so the first and last bars are not
+// flush against the edge of the grid.
 const RANGE_PAD = 4;
 
 export interface MonthInfo {
@@ -19,32 +19,28 @@ export interface TimelineRange {
   firstMondayOffset: number;
 }
 
-// Every date in this module is a *calendar* date pinned to local midnight, and
-// every operation on one goes through the Date constructor, which walks the
-// calendar. Never step by a fixed 86_400_000: a fall-back day is 25 hours long,
-// so millisecond arithmetic drifts onto 23:00 of the day before and stays there.
+// Every date here is a *calendar* date at local midnight, moved only through the
+// Date constructor, which walks the calendar. Never step by a fixed 86_400_000:
+// a fall-back day is 25 hours, so ms arithmetic drifts onto 23:00 of the day
+// before and stays there.
 
 /**
- * A `YYYY-MM-DD` date read as *local* midnight. Everything in the chart sits on
- * this grid, so reading these as UTC instead would shift every bar by a day for
- * any viewer west of UTC.
+ * A `YYYY-MM-DD` date read as *local* midnight. Reading it as UTC would shift
+ * every bar a day for any viewer west of UTC.
  */
 export function parseDay(s: string): Date {
   const [year, month, day] = s.split('-').map(Number);
   return new Date(year, month - 1, day);
 }
 
-/** The calendar day `days` after `date` (or before it, for a negative count). */
 export function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
 /**
- * Whole calendar days from `a` to `b`, ignoring any time of day.
- *
- * Both dates are re-pinned to UTC midnight before subtracting. UTC has no DST,
- * so there the division is exact and needs no rounding to absorb 23- and
- * 25-hour days.
+ * Whole calendar days from `a` to `b`, ignoring any time of day. Both sides are
+ * re-pinned to UTC midnight, where every day is 24 hours, so the division is
+ * exact and needs no rounding to absorb a DST transition.
  */
 export function daysBetween(a: Date, b: Date): number {
   const from = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
@@ -53,9 +49,8 @@ export function daysBetween(a: Date, b: Date): number {
 }
 
 /**
- * The day grid the chart is drawn on, derived from the task dates alone.
- * Assumes at least one task — an empty roadmap has no dates to bound a range
- * with, and is shown as an empty state instead of a chart.
+ * The day grid the chart is drawn on. Assumes at least one task — see
+ * `hasChartableRange`.
  */
 export function computeRange(tasks: Task[]): TimelineRange {
   const allDates = tasks.flatMap(t => {
@@ -72,9 +67,8 @@ export function computeRange(tasks: Task[]): TimelineRange {
 
   const totalDays = daysBetween(rangeStart, rangeEnd) + 1;
 
-  // Days to skip before the first Monday, 0 when rangeStart already is one.
-  // getDay() is 0 for Sunday, so the wrap is what keeps a Monday at 0 instead
-  // of pushing it a full week out.
+  // The `% 7` is what keeps a rangeStart that is already a Monday at 0 rather
+  // than a full week out.
   const firstMondayOffset = (8 - rangeStart.getDay()) % 7;
 
   const months: MonthInfo[] = [];
@@ -85,10 +79,8 @@ export function computeRange(tasks: Task[]): TimelineRange {
     monthStart <= rangeEnd;
     monthStart = new Date(year, ++month, 1)
   ) {
-    // Inclusive last day of the cell, at local midnight like every other date on
-    // this grid — day 0 of next month is the last day of this one. Ending on
-    // 23:59:59.999 instead would make the cell a day too wide and overlap its
-    // neighbour. The constructor normalizes month 12 into January of next year.
+    // Local midnight like the rest of the grid: ending the cell on 23:59:59.999
+    // instead makes it a day too wide and overlaps its neighbour.
     const monthEnd = new Date(year, month + 1, 0);
     const mStart = monthStart < rangeStart ? rangeStart : monthStart;
     const mEnd = monthEnd > rangeEnd ? rangeEnd : monthEnd;
@@ -106,40 +98,31 @@ export function computeRange(tasks: Task[]): TimelineRange {
  * Days to scroll by to keep the same calendar date under a fixed viewport when
  * the grid's origin moves from `prev` to `next`.
  *
- * `rangeStart` is derived from the task dates, so editing the YAML can move it.
- * Every offset in the chart is recomputed against the new origin, but the
- * browser's `scrollLeft` is a raw pixel value that survives the update — so a
- * roadmap that grows a new earliest task slides the whole grid right underneath
- * a viewport that stays put, silently showing an earlier date than before.
- *
- * Positive when `next` is earlier than `prev` (content moved right, so the
- * viewport has to follow it right); negative when the origin moved later.
+ * Editing the YAML can move `rangeStart`. Every offset is recomputed against the
+ * new origin, but `scrollLeft` is a raw pixel value that survives the update, so
+ * without this correction a new earliest task slides the grid right underneath a
+ * viewport that stays put. Positive when the origin moved earlier.
  */
 export function scrollShiftDays(prev: Date, next: Date): number {
   return daysBetween(next, prev);
 }
 
 /**
- * Day offset of `now`'s calendar day from `rangeStart`. Uncapped on purpose: a
- * roadmap entirely in the past or the future reports how far off today is, which
- * is what hides the marker and lets the browser clamp the initial scroll.
+ * Day offset of `now`'s *local* calendar day from `rangeStart`. Reading UTC date
+ * parts here would place today a day off for the width of the UTC offset every
+ * day (evenings west of UTC, small hours east of it).
  *
- * `now`'s *local* calendar day is what counts — the grid is local, so reading
- * UTC date parts here would place today a day off for the width of the UTC
- * offset every day (evening hours west of UTC, small hours east of it).
- * `daysBetween` drops the clock time for us, so `now` can be an instant.
+ * Uncapped on purpose: for a roadmap wholly past or future the out-of-range
+ * number is what hides the marker and lets the browser clamp the initial scroll.
  */
 export function todayOffset(rangeStart: Date, now: Date): number {
   return daysBetween(rangeStart, now);
 }
 
 /**
- * Whether `tasks` can produce a grid at all.
- *
  * `computeRange` takes `Math.min` over the task dates, which is `Infinity` for
- * an empty list — so an empty roadmap yields an Invalid Date origin and a NaN
- * width, and renders as a chart with no bars and no day columns rather than as
- * an error. Callers show an empty state instead.
+ * an empty list: the origin comes out an Invalid Date and every width NaN,
+ * silently, with nothing thrown. Callers must check this before charting.
  */
 export function hasChartableRange(tasks: Task[]): boolean {
   return tasks.length > 0;

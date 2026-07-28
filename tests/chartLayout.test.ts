@@ -1,37 +1,36 @@
 import { describe, test, expect } from 'vitest';
-import { DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, taskBarGeometry } from '../src/chartLayout';
+import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, taskBarGeometry } from '../src/chartLayout';
 import type { Task } from '../src/parseYaml';
 
 describe('effectiveDayW', () => {
   // Before the ResizeObserver has reported, there is no width to divide up.
-  test('falls back to DAY_W before the container has been measured', () => {
-    expect(effectiveDayW(0, 21)).toBe(DAY_W);
+  test('falls back to BASE_DAY_W before the container has been measured', () => {
+    expect(effectiveDayW(0, 21)).toBe(BASE_DAY_W);
   });
 
-  // A short roadmap must stretch to fill the card, or the chart ends in a
-  // block of dead space — the phantom-empty-space bug AGENTS.md warns about.
+  // A short roadmap must stretch to fill the card, or the chart ends in a block
+  // of dead space — the phantom-empty-space bug.
   test('stretches days to fill a container wider than the timeline', () => {
     // (1400 − 280) / 20 = 56px per day.
     expect(effectiveDayW(1400, 20)).toBe(56);
   });
 
-  // The other direction must NOT shrink below DAY_W: a long roadmap scrolls
+  // The other direction must not shrink below BASE_DAY_W: a long roadmap scrolls
   // horizontally rather than compressing into an unreadable smear.
-  test('never shrinks below DAY_W', () => {
+  test('never shrinks below BASE_DAY_W', () => {
     // (700 − 280) / 21 = 20, which is below the floor.
-    expect(effectiveDayW(700, 21)).toBe(DAY_W);
+    expect(effectiveDayW(700, 21)).toBe(BASE_DAY_W);
   });
 
-  test('holds at DAY_W exactly where the timeline fills the container', () => {
+  test('holds at BASE_DAY_W exactly where the timeline fills the container', () => {
     // (1120 − 280) / 21 = 40 — the boundary between the two branches above.
-    expect(effectiveDayW(1120, 21)).toBe(DAY_W);
+    expect(effectiveDayW(1120, 21)).toBe(BASE_DAY_W);
   });
 });
 
 describe('hoverOffsetAt', () => {
-  // The label column is sticky and the timeline scrolls under it, so the
-  // cursor's page x has to be corrected by both the label width and the scroll
-  // before it means anything in day-space.
+  // The label column is sticky and the timeline scrolls under it, so the cursor's
+  // page x means nothing in day-space until both are subtracted out.
   test('converts a cursor position into a day offset', () => {
     // 500 − 100 − 280 = 120px into the timeline; 120 / 40 = day 3.
     expect(hoverOffsetAt({
@@ -68,7 +67,7 @@ describe('constants', () => {
   // Pinned because the jsdom scroll tests hand-derive expected pixel values
   // from them; changing either silently invalidates those expectations.
   test('pin the grid dimensions', () => {
-    expect(DAY_W).toBe(40);
+    expect(BASE_DAY_W).toBe(40);
     expect(LABEL_W).toBe(280);
   });
 });
@@ -89,11 +88,11 @@ function task(overrides: Partial<Task> = {}): Task {
 }
 
 describe('taskBarGeometry', () => {
-  // Bars are inclusive of their end date — a Jul 1 to Jul 11 task covers 11
-  // days, not 10. Dropping the +1 makes every bar end a day short.
+  // Bars include their end date: a Jul 1 to Jul 11 task covers 11 days, not 10.
+  // Dropping the +1 makes every bar end a day short.
   test('positions a bar from the range origin, inclusive of the end date', () => {
     // Jul 1 is 4 days after Jun 27, Jul 11 is 14: left 160, width 11 * 40.
-    expect(taskBarGeometry(task(), RANGE_START, DAY_W)).toEqual({
+    expect(taskBarGeometry(task(), RANGE_START, BASE_DAY_W)).toEqual({
       barLeft: 160, barW: 440, ghost: null,
     });
   });
@@ -105,20 +104,19 @@ describe('taskBarGeometry', () => {
     });
 
     // Jun 29 is offset 2, Jul 5 is offset 8: left 80, width 7 * 40.
-    expect(taskBarGeometry(slipped, RANGE_START, DAY_W).ghost).toEqual({
+    expect(taskBarGeometry(slipped, RANGE_START, BASE_DAY_W).ghost).toEqual({
       left: 80, width: 280,
     });
   });
 
-  // Both-or-neither. One date alone cannot describe a baseline bar, and
-  // treating the missing end as offset 0 would draw a ghost from the grid
-  // origin to the start date — a slip that never happened.
+  // Both-or-neither: treating a missing end as offset 0 draws a ghost from the
+  // grid origin to the start date — a slip that never happened.
   test('ignores a half-specified baseline', () => {
     const startOnly = task({ originallyPlannedStart: '2026-06-29' });
     const endOnly = task({ originallyPlannedEnd: '2026-07-05' });
 
-    expect(taskBarGeometry(startOnly, RANGE_START, DAY_W).ghost).toBeNull();
-    expect(taskBarGeometry(endOnly, RANGE_START, DAY_W).ghost).toBeNull();
+    expect(taskBarGeometry(startOnly, RANGE_START, BASE_DAY_W).ghost).toBeNull();
+    expect(taskBarGeometry(endOnly, RANGE_START, BASE_DAY_W).ghost).toBeNull();
   });
 
   // At a compressed day width a one-day task rounds to a bar too thin to see
@@ -132,7 +130,6 @@ describe('taskBarGeometry', () => {
 });
 
 describe('chipX', () => {
-  // The default: assignee chips sit just past the right end of the bar.
   test('places chips to the right of the bar when they fit', () => {
     expect(chipX({
       barLeft: 160, barW: 440, assignees: ['Bob'], totalDays: 21, dayW: 40,
@@ -148,18 +145,17 @@ describe('chipX', () => {
     })).toBe(123.4);
   });
 
-  // Flipping only helps if there is room on the left. A bar that overflows the
-  // right AND starts near the origin keeps its chips on the right, clipped,
-  // rather than flipping them to a negative offset.
+  // Flipping only helps if there is room on the left. A bar that overflows right
+  // and starts near the origin keeps its chips on the right, clipped, rather than
+  // flipping them to a negative offset.
   test('keeps chips right when there is no room on the left either', () => {
     expect(chipX({
       barLeft: 20, barW: 600, assignees: ['Bob'], totalDays: 16, dayW: 40,
     })).toBe(626);
   });
 
-  // approxChipW's reduce starts from an empty array, so an empty assignees
-  // list must not throw or coerce to NaN and poison the left/right comparison
-  // — it should behave exactly like a zero-width chip sitting at the bar end.
+  // An empty assignees list must not coerce approxChipW to NaN and poison the
+  // left/right comparison; it behaves like a zero-width chip at the bar end.
   test('leaves the chip position at the bar end when there are no assignees', () => {
     expect(chipX({
       barLeft: 160, barW: 440, assignees: [], totalDays: 21, dayW: 40,

@@ -27,7 +27,7 @@ interface YamlDocument {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Whether `YYYY-MM-DD` names a day that exists, read the way `parseDay` reads it. */
+/** Whether the string names a day that exists, read the way `parseDay` reads it. */
 function isRealDay(s: string): boolean {
   const [year, month, day] = s.split('-').map(Number);
   const d = new Date(year, month - 1, day);
@@ -35,16 +35,11 @@ function isRealDay(s: string): boolean {
 }
 
 /**
- * Coerce a YAML date value to `YYYY-MM-DD`, rejecting anything that is not one.
- *
- * Only an *unquoted* date reaches us as a `Date` — js-yaml leaves a quoted one a
- * plain string, so without a check here `"not-a-date"` flows straight into
- * `parseDay`. This is the last place to catch it: an Invalid Date poisons the
- * min/max in `computeRange`, which blanks the entire chart rather than the one
- * bad row, with no error anywhere.
- *
- * The round-trip through `Date` is what the regex alone cannot do — the
- * constructor rolls `2025-13-01` forward into January 2026 instead of failing.
+ * js-yaml converts only *unquoted* dates to `Date`, so a quoted `"not-a-date"`
+ * arrives as a plain string — and this is the last place to catch it: an Invalid
+ * Date poisons the min/max in `computeRange` and blanks the whole chart, not just
+ * the bad row, with nothing thrown. The `isRealDay` round-trip catches what the
+ * regex cannot, since the Date constructor rolls `2025-13-01` into Jan 2026.
  */
 function toDateStr(val: string | Date, field: string, where: string): string {
   const s = val instanceof Date ? val.toISOString().slice(0, 10) : String(val);

@@ -35,19 +35,18 @@ function task(overrides: Partial<Task> = {}): Task {
 // The fixture's grid, hand-derived:
 //   rangeStart = Jul 1 − RANGE_PAD(4) = Sat Jun 27 2026, totalDays = 21
 //   today is pinned to Jul 28 2026, so todayRawOffset = 31
-//   scrollLeft = (31 − TODAY_LEAD_IN(7)) * DAY_W(40) = 960
+//   scrollLeft = (31 − TODAY_LEAD_IN(7)) * BASE_DAY_W(40) = 960
 const FOCUSED_SCROLL = 960;
 
 // Adding a task starting Jun 21 moves rangeStart to Wed Jun 17 — ten days
 // earlier — so every offset grows by 10 and the viewport must follow right by
-// 10 * DAY_W = 400 to keep the same date at its left edge.
+// 10 * BASE_DAY_W = 400 to keep the same date at its left edge.
 const REANCHOR_SHIFT = 400;
 
 /**
- * jsdom supplies neither of the two things the latch reads. `clientWidth` is a
- * zero-returning getter on the prototype; ResizeObserver is absent entirely.
- * Both are restored in afterEach — a leaked prototype getter would corrupt
- * every later test in the file.
+ * jsdom supplies neither thing the latch reads: `clientWidth` is a zero-returning
+ * prototype getter, ResizeObserver is absent. Both must be restored — a leaked
+ * prototype getter corrupts every later test in the file.
  */
 function installLayoutStubs(initialWidth: number) {
   let width = initialWidth;
@@ -85,8 +84,8 @@ function installLayoutStubs(initialWidth: number) {
 let host: HTMLDivElement;
 
 beforeEach(() => {
-  // Date only. Faking timers wholesale would also capture the popover's
-  // setTimeout, which nothing here drives.
+  // Date only: faking timers wholesale also captures the popover's setTimeout,
+  // which nothing here drives.
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 6, 28));
   host = document.createElement('div');
@@ -99,7 +98,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** The scrollable div GanttChart attaches its ref to is the component's root. */
+/** GanttChart's ref is on its root div, which is the scrollable one. */
 function scroller(): HTMLDivElement {
   return host.firstElementChild as HTMLDivElement;
 }
@@ -122,11 +121,10 @@ describe('initial scroll latch', () => {
     }
   });
 
-  // The case that discriminates. A chart mounted inside `display: none` has no
-  // layout box, so the scrollLeft assignment is silently discarded — an
-  // embedder that reveals it later (a reveal.js slide, a tab, an accordion)
-  // was left stuck at rangeStart. A mount-only latch passes the test above and
-  // fails this one; that is the whole reason this test exists.
+  // A chart mounted inside `display: none` has no layout box, so the scrollLeft
+  // assignment is silently discarded and an embedder that reveals it later (a
+  // reveal.js slide, a tab, an accordion) is left stuck at rangeStart. A
+  // mount-only latch passes the test above and fails this one.
   test('recovers on a mount that is revealed later', () => {
     const stubs = installLayoutStubs(0);
     try {
@@ -160,10 +158,9 @@ describe('initial scroll latch', () => {
 });
 
 describe('rangeStart re-anchor', () => {
-  // Holding scroll across a reload means holding the *date* at the left edge,
-  // not the pixel. A reload that introduces an earlier task moves the origin
-  // and shifts every offset right, while scrollLeft — a DOM value untouched by
-  // the render — keeps pointing at what is now an earlier day.
+  // Holding scroll across a reload means holding the *date* at the left edge, not
+  // the pixel: an earlier task shifts every offset right while scrollLeft, which
+  // the render never touches, keeps pointing at what is now an earlier day.
   test('follows the grid when a new earliest task moves the origin', () => {
     const stubs = installLayoutStubs(1182);
     try {

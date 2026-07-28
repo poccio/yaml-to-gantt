@@ -20,9 +20,8 @@ export default function App() {
   const [selectedAssignees, setSelectedAssignees] = useState<Set<string> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
-  // The CLI's flags, carried in the URL. Read on first render rather than at
-  // module scope: touching `window` on import throws outside a browser, which
-  // makes this module untestable in the suite's node environment.
+  // Read on first render, not at module scope: touching `window` on import
+  // throws outside a browser and makes this module unimportable in the tests.
   const [{ file, hideAssigneeFilter }] = useState(() => readUrlOptions(window.location.search));
   const [filename, setFilename] = useState<string | null>(file);
 
@@ -106,7 +105,6 @@ export default function App() {
       color: theme.text,
       boxSizing: 'border-box',
     }}>
-      {/* Card */}
       <div style={{
         background: theme.surface,
         borderRadius: 16,
@@ -133,7 +131,6 @@ export default function App() {
         flexDirection: 'column',
         overflow: 'hidden',
       }}>
-        {/* Top bar */}
         <div style={{
           flexShrink: 0,
           background: `linear-gradient(180deg, rgba(255,255,255,${isDark ? '0.02' : '0.5'}) 0%, transparent 100%), ${theme.surface}`,
@@ -143,7 +140,6 @@ export default function App() {
           flexDirection: 'column',
           gap: 12,
         }}>
-          {/* Row 1: title + file controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{
               fontSize: 15,
@@ -221,7 +217,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Row 2: assignee filter pills */}
           {!hideAssigneeFilter && allAssignees.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
               <span style={{
@@ -254,11 +249,9 @@ export default function App() {
           )}
         </div>
 
-        {/* Chart / empty state */}
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex' }}>
-          {/* A zero-task array is a valid parse, but it gives GanttChart no dates
-              to build a range from (Math.min of nothing is Infinity), so keep it
-              out of the chart entirely rather than rendering NaN geometry. */}
+          {/* A zero-task array is a valid parse, but gives GanttChart no dates
+              to build a range from — it would render NaN geometry. */}
           {!tasks || !hasChartableRange(tasks)
             ? <EmptyState
                 theme={theme}
@@ -284,7 +277,6 @@ const GHOST_BARS = [
 interface EmptyStateProps {
   onLoad: (text: string, name?: string) => void;
   theme: Theme;
-  /** Idle text. The drag-over text is always "Drop to load". */
   message?: string;
 }
 
@@ -323,7 +315,6 @@ function EmptyState({ onLoad, theme, message = 'Drop a YAML file to begin' }: Em
         transition: 'border-color 0.15s, background 0.15s',
       }}
     >
-      {/* Ghost gantt illustration */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 13, transition: 'opacity 0.15s', opacity: dragging ? 0.3 : 1 }}>
         {GHOST_BARS.map((bar, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
@@ -341,7 +332,6 @@ function EmptyState({ onLoad, theme, message = 'Drop a YAML file to begin' }: Em
         ))}
       </div>
 
-      {/* Text */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
         <span style={{
           fontSize: 14,

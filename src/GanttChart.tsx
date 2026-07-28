@@ -3,15 +3,14 @@ import type { JSX } from 'preact';
 import type { Task } from './parseYaml';
 import type { Theme } from './themes';
 import { addDays, computeRange, scrollShiftDays, todayOffset } from './timeline';
-import { CARET_SIZE, POPOVER_W, placePopover } from './popover';
+import { CARET_HALF_EDGE, POPOVER_W, placePopover } from './popover';
 import type { PopoverPos } from './popover';
-import { DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, taskBarGeometry } from './chartLayout';
+import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, taskBarGeometry } from './chartLayout';
 
 const ROW_H = 52;
 const PROJ_H = 54;
 const HDR_H = 68;
-// Days of past context shown to the left of "today" on first render. Roughly a
-// quarter of a typical viewport, so the rest is spent on upcoming work.
+// Days of past context left of "today" when the chart opens.
 const TODAY_LEAD_IN = 7;
 
 const PROJECT_COLORS = [
@@ -55,8 +54,8 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   const [openTask, setOpenTask] = useState<{ task: Task; anchorRect: DOMRect } | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Hover-driven popover: open on marker hover/focus, close after a short delay
-  // so the pointer can travel onto the popover (e.g. to click a link inside it).
+  // Delayed so the pointer can travel from the marker onto the popover, e.g. to
+  // click a link inside it.
   const popoverCloseTimer = useRef<number | null>(null);
   const cancelPopoverClose = () => {
     if (popoverCloseTimer.current !== null) {
@@ -108,11 +107,10 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     return ticks;
   }, [rangeStart, totalDays]);
 
-  // Day offset of "today" from rangeStart, uncapped — it can fall outside
-  // [0, totalDays) for a roadmap that is entirely in the past or the future.
+  // Raw as in uncapped — for a roadmap wholly past or future this falls outside
+  // [0, totalDays), which the initial scroll relies on and the marker does not.
   const todayRawOffset = useMemo(() => todayOffset(rangeStart, new Date()), [rangeStart]);
 
-  // null when today is off the timeline — the marker and line are not drawn.
   const todayVisibleOffset = todayRawOffset >= 0 && todayRawOffset < totalDays
     ? todayRawOffset
     : null;
@@ -130,53 +128,43 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     !selectedAssignees ||
     task.assignees.some(a => selectedAssignees.has(a));
 
-  const timelineMinW = totalDays * DAY_W;
+  const timelineMinW = totalDays * BASE_DAY_W;
   const dayW = effectiveDayW(containerWidth, totalDays);
 
-  // Open focused on today, not on the start of the roadmap. Once-only: an SSE
-  // hot-reload of the YAML must not yank the scroll position out from under
-  // whatever the user was looking at, and neither must a window resize.
+  // Open focused on today, not on rangeStart, exactly once — neither an SSE
+  // hot-reload nor a resize may move the user's scroll position afterwards.
   //
-  // "Once" cannot mean "on mount", though. A chart mounted inside a hidden
-  // subtree (display: none) has no layout box, so a scrollLeft assignment is
-  // silently discarded — that is how an embedder that reveals the chart later
-  // (a reveal.js slide, a tab, an accordion) ended up stuck at rangeStart. So
-  // wait for the first real layout, then focus today exactly once. On a
-  // normally-visible mount the container already has a width, so this still
-  // runs on the first pass and nothing changes.
+  // "Once" cannot mean "on mount": a chart inside a `display: none` subtree has
+  // no layout box, so the scrollLeft assignment is silently discarded, leaving
+  // an embedder that reveals it later (a reveal.js slide, a tab, an accordion)
+  // stuck at rangeStart. Latch on the first pass that has layout instead.
   //
-  // The browser clamps scrollLeft to [0, scrollWidth - clientWidth], which
-  // handles both out-of-range cases for free: a future-only roadmap stays at
-  // the left edge, a fully-past one lands at the right showing the tail. When
-  // the timeline is short enough to fit, there is nothing to scroll and this
-  // is a no-op.
+  // Out-of-range roadmaps need no special case — the browser clamps scrollLeft.
   const hasFocusedToday = useRef(false);
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (hasFocusedToday.current || !container || container.clientWidth === 0) return;
-    // DAY_W, not dayW: the two differ only when the timeline fits the
-    // container, and then there is nothing to scroll anyway.
-    container.scrollLeft = (todayRawOffset - TODAY_LEAD_IN) * DAY_W;
+    // BASE_DAY_W, not dayW: where the two differ the timeline fits the
+    // container and there is nothing to scroll.
+    container.scrollLeft = (todayRawOffset - TODAY_LEAD_IN) * BASE_DAY_W;
     hasFocusedToday.current = true;
   }, [containerWidth, todayRawOffset]);
 
-  // Holding the scroll position across an SSE reload means holding the *date*
-  // at the left edge, not the pixel. rangeStart is derived from the task dates,
-  // so a reload that introduces an earlier task moves the origin and shifts
-  // every offset right, while scrollLeft — a DOM value, untouched by the render
-  // — keeps pointing at what is now an earlier day. Re-anchor by the same delta.
+  // Holding scroll across an SSE reload means holding the *date* at the left
+  // edge, not the pixel: a reload that adds an earlier task moves rangeStart and
+  // shifts every offset right, while scrollLeft — a DOM value the render never
+  // touches — keeps pointing at what is now an earlier day.
   //
-  // Guarded on the latch: before today-focus has run there is no position worth
-  // preserving, and shifting first would only fight the effect above.
+  // Guarded on the latch, so it cannot fight the effect above: before today-focus
+  // has run there is no position worth preserving.
   const prevRangeStart = useRef(rangeStart);
   useLayoutEffect(() => {
     const container = containerRef.current;
     const shift = scrollShiftDays(prevRangeStart.current, rangeStart);
     prevRangeStart.current = rangeStart;
-    // DAY_W for the same reason as above: where dayW differs, the
-    // timeline fits the container and there is nothing to scroll.
+    // BASE_DAY_W for the same reason as above.
     if (container && hasFocusedToday.current && shift !== 0) {
-      container.scrollLeft += shift * DAY_W;
+      container.scrollLeft += shift * BASE_DAY_W;
     }
   }, [rangeStart]);
 
@@ -272,14 +260,13 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
       onScroll={() => setOpenTask(null)}
     >
 
-      {/* Sticky header */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 30,
         display: 'flex', height: HDR_H,
         background: `linear-gradient(180deg, ${theme.headerBg} 0%, ${theme.surface} 100%)`,
         borderBottom: `1px solid ${theme.border}`,
       }}>
-        {/* Corner */}
+        {/* Corner above the label column */}
         <div style={{
           ...labelCell(),
           zIndex: 31,
@@ -287,10 +274,8 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
           borderRight: `1px solid ${theme.border}`,
         }} />
 
-        {/* Month + day header */}
         <div style={tlCell()}>
 
-          {/* Month row */}
           <div style={{ position: 'relative', height: 30, borderBottom: `1px solid ${theme.borderInner}` }}>
             {months.map((m, i) => (
               <div key={i} style={{
@@ -308,7 +293,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             ))}
           </div>
 
-          {/* Day row */}
           <div style={{ position: 'relative', height: 38, overflow: 'visible' }}>
             {dayTicks.map((d) => (
               <div key={d.offset} style={{
@@ -325,7 +309,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
               </div>
             ))}
 
-            {/* Hover column highlight in header */}
             {hoverOffset !== null && (
               <div style={{
                 position: 'absolute',
@@ -336,7 +319,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
               }} />
             )}
 
-            {/* Hover date badge */}
             {hoverDate && (
               <div style={{
                 position: 'absolute',
@@ -369,10 +351,9 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
         </div>
       </div>
 
-      {/* Project sections. The "today" line for the body is rendered once as a
-          full-height overlay below (not per row) so per-row hover dimming —
-          opacity on the row div, which would cap any child's opacity — can't
-          fade it. */}
+      {/* One full-height overlay at the end, not a segment per row: hover dimming
+          sets opacity on the row div, which caps any child's and would fade the
+          line along with the row. */}
       <div style={{ position: 'relative' }}>
       {projects.map(proj => {
         const rgb = hexRgb(proj.color);
@@ -382,7 +363,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
         return (
           <div key={proj.name}>
 
-            {/* Project header row */}
             <div style={{
               display: 'flex', height: PROJ_H,
               opacity: hoveredRow !== null ? 0.4 : 1,
@@ -419,7 +399,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
               </div>
             </div>
 
-            {/* Task rows */}
             {visibleTasks.map(task => {
               const geo = taskBarGeometry(task, rangeStart, dayW);
               const isHl = !!selectedAssignees && task.assignees.some(a => selectedAssignees.has(a));
@@ -510,13 +489,13 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                     )}
                     <Crosshair height={ROW_H} />
 
-                    {/* Baseline ghost (original plan). The live bar overshooting this
-                        outline — or sitting right of it — is what communicates the slip. */}
+                    {/* The original plan, so slippage reads as the live bar
+                        overshooting this outline. */}
                     {geo.ghost && (
                       <div style={{
                         position: 'absolute',
                         left: geo.ghost.left, top: '50%', transform: 'translateY(-50%)',
-                        width: geo.ghost.width, height: 26, // taller than the live bar so the ghost frames it above/below
+                        width: geo.ghost.width, height: 26, // taller than the live bar, so it frames it
                         borderRadius: 6,
                         background: theme.ghostFill,
                         border: `1.5px dashed ${theme.ghostBorder}`,
@@ -526,7 +505,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                       }} />
                     )}
 
-                    {/* Live bar */}
                     <div style={{
                       position: 'absolute',
                       left: geo.barLeft, top: '50%', transform: 'translateY(-50%)',
@@ -538,7 +516,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                       zIndex: 2,
                     }} />
 
-                    {/* Assignee chips */}
                     {task.assignees.length > 0 && (
                       <div style={{
                         position: 'absolute', left: chipLeft,
@@ -663,10 +640,10 @@ function TaskInfoPopover({ task, anchorRect, theme, onClose, onHoverEnter, onHov
       {pos && (
         <div style={{
           position: 'absolute',
-          left: pos.caretLeft - CARET_SIZE,
-          ...(pos.placement === 'below' ? { top: -CARET_SIZE } : { bottom: -CARET_SIZE }),
-          width: CARET_SIZE * 2,
-          height: CARET_SIZE * 2,
+          left: pos.caretLeft - CARET_HALF_EDGE,
+          ...(pos.placement === 'below' ? { top: -CARET_HALF_EDGE } : { bottom: -CARET_HALF_EDGE }),
+          width: CARET_HALF_EDGE * 2,
+          height: CARET_HALF_EDGE * 2,
           background: theme.raised,
           borderLeft: `1px solid ${theme.border}`,
           borderTop: `1px solid ${theme.border}`,

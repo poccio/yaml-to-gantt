@@ -1,39 +1,18 @@
 #!/usr/bin/env node
 //
-// generate-screenshot.mjs
-// -----------------------------------------------------------------------------
-// Generates the static "result" frame used by the demo GIF pipeline — by
-// default assets/gif/screenshot/screenshot-dark.png, the chart image the demo
-// GIF crossfades into. Usually invoked via generate-screenshot.sh (which runs
-// `pnpm build` first); this file is the headless-browser step.
+// The headless-browser step of the demo GIF pipeline: boots the project's own
+// server, drives Chromium, opens a task's description popover, and screenshots
+// the chart. Normally invoked by generate-screenshot.sh, which runs `pnpm build`
+// first — the server serves dist/, not src/, so a direct run shows a stale app.
 //
-// It boots the project's own server (server/index.js) to serve a YAML file,
-// drives a headless Chromium via Playwright, hovers a task's "?" marker to open
-// the description popover, and screenshots the page.
+// Playwright's browser binary is not a devDependency; install it once:
+//   pnpm exec playwright install chromium
 //
-// One-time setup (the npm package is a devDependency; the browser binary is not,
-// so it must be installed once):
-//   pnpm add -D playwright && pnpm exec playwright install chromium
-//
-// The server serves the built app, so build first if you changed src/:
-//   pnpm build
-//
-// Usage (run from anywhere; paths resolve relative to this file):
-//   node assets/gif/screenshot/generate-screenshot.mjs
-//   node assets/gif/screenshot/generate-screenshot.mjs \
-//     --yaml ../roadmap.yaml --out screenshot-dark.png \
-//     --theme dark --task Design --display roadmap.yaml
-//
-// Flags (all optional):
-//   --yaml     YAML file to render        (default: ../roadmap.yaml — the shared source)
-//   --out      output PNG path            (default: screenshot-dark.png, next to this script)
-//   --theme    dark | light               (default: dark)
-//   --task     task name whose popover to open; '' to skip   (default: Design)
-//   --display  toolbar path label (?file=)(default: roadmap.yaml)
-//   --width    viewport width  px         (default: 1280)
-//   --height   viewport height px         (default: 720)
-//   --scale    deviceScaleFactor          (default: 2 — crisper; ffmpeg scales to 1280x720)
-// -----------------------------------------------------------------------------
+// Flags, all optional, defaults just below: --yaml --out --theme --task
+// --display --width --height --scale. Paths resolve relative to this file.
+// --display sets the toolbar label independently of --yaml, so the frame reads
+// "roadmap.yaml" whatever path was actually rendered. --scale is 2 for
+// crispness; ffmpeg scales back down to 1280x720.
 
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -52,7 +31,6 @@ try {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Minimal --flag value parser.
 const argv = process.argv.slice(2);
 const args = {};
 for (let i = 0; i < argv.length; i++) {
@@ -81,7 +59,6 @@ try {
 
   await page.goto(`${base}?file=${encodeURIComponent(DISPLAY)}`);
 
-  // Let the chart render.
   await page.waitForTimeout(800);
 
   if (TASK) {

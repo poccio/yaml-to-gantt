@@ -1,7 +1,6 @@
 {
-  // Solution file — owns no source of its own. `tsc --build` walks these
-  // references and checks each project under its own runtime's rules, exactly
-  // once. Per-runtime settings live in the referenced configs, not here.
+  // Solution file — owns no source. Per-runtime settings belong in the
+  // referenced configs, not here.
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },

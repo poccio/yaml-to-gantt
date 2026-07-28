@@ -1,29 +1,19 @@
 #!/bin/bash
 #
-# generate-gif.sh — end-to-end demo GIF builder (orchestrator).
-#
-# Produces an up-to-date assets/gif/demo.gif from assets/gif/roadmap.yaml by
-# delegating each half to its own script and crossfading the results:
-#   1. terminal/generate-gif.sh      -> terminal/terminal.gif
-#   2. screenshot/generate-screenshot.sh -> screenshot/screenshot-dark.png
-#   3. crossfade terminal -> screenshot into demo.gif
-#
-# roadmap.yaml is the single source of truth for both halves — the terminal
-# types it and the screenshot renders it. Each sub-script is self-contained and
-# can be run on its own while iterating (e.g. tweak typing speed by re-running
-# terminal/generate-gif.sh and opening terminal/terminal.gif).
+# Builds demo.gif by crossfading the two halves below. roadmap.yaml is the single
+# source of truth for both — the terminal half types it, the screenshot half
+# renders it. Either sub-script also runs standalone while iterating.
 #
 # Prerequisites (host): docker (running), ffmpeg/ffprobe, bc, pnpm, and the
-# Playwright browser binary for the screenshot step:
+# Playwright browser binary:
 #   pnpm exec playwright install chromium
 #
 # Usage:
 #   bash assets/gif/generate-gif.sh [roadmap.yaml]
 #
-#   roadmap.yaml   optional path to the roadmap to render
-#                  (default: assets/gif/roadmap.yaml)
-#   TASK=<name>    env var: task whose popover to open in the screenshot,
-#                  '' to skip (default: Design)
+#   roadmap.yaml   roadmap to render (default: assets/gif/roadmap.yaml)
+#   TASK=<name>    task whose popover to open in the screenshot, '' to skip
+#                  (default: Design)
 
 set -euo pipefail
 

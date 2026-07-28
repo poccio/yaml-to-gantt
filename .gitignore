@@ -1,33 +1,25 @@
-# dependencies
 node_modules/
-
-# production
 dist/
 
-# compiled server/cli (source is .ts, build emits .js)
+# build output: the source is .ts, the shipped JS is emitted next to it
 server/*.js
 bin/*.js
 .build-server/
 
-# tsc --build output: incremental caches, and the node project's declarations
-# (which tsconfig.test.json consumes across the project reference)
+# tsc --build caches, plus the declarations tsconfig.test.json consumes
 .tsbuild/
 
-# vite
 .vite/
 
-# logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# environment variables
 .env
 .env.local
 .env.*.local
 
-# editor directories and files
 .vscode/
 .idea/
 .DS_Store
@@ -36,16 +28,12 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 
-# testing
 coverage/
-
-# misc
 *.log
 
-# exclude superpowers
 .superpowers/
 docs/superpowers/
 
-# demo gif pipeline intermediates (demo.gif itself is committed — README links to it)
+# demo gif pipeline intermediates; demo.gif itself is committed, README links it
 assets/gif/terminal/terminal.gif
 assets/gif/screenshot/screenshot-dark.png

@@ -9,7 +9,6 @@ function anchor(overrides: Partial<{ top: number; bottom: number; left: number; 
 }
 
 describe('placePopover', () => {
-  // The common case: hang below the marker, centred on it.
   test('places below when there is room below', () => {
     // centre x = 509, so left = 509 − 320/2 = 349; top = bottom(118) + GAP(10).
     expect(placePopover(anchor(), 200, VIEWPORT)).toEqual({
@@ -17,8 +16,8 @@ describe('placePopover', () => {
     });
   });
 
-  // A marker near the bottom of the window has to flip, or the popover runs
-  // off the screen and the description is unreadable.
+  // A marker near the bottom has to flip, or the popover runs off screen and the
+  // description is unreadable.
   test('flips above when below would overflow', () => {
     // spaceBelow = 900 − 818 = 82, short of 200 + 10 + 8; anchor.top 800 is not.
     expect(placePopover(anchor({ top: 800, bottom: 818 }), 200, VIEWPORT)).toEqual({
@@ -26,8 +25,8 @@ describe('placePopover', () => {
     });
   });
 
-  // A popover taller than the viewport fits nowhere. It must still land on
-  // screen rather than at a negative top, so it is pinned to the bottom margin.
+  // A popover taller than the viewport fits nowhere, but must still land on screen
+  // rather than at a negative top.
   test('pins to the bottom margin when neither side fits', () => {
     // 800 tall: spaceBelow 782 and spaceAbove 100 both fall short.
     // top = max(MARGIN 8, 900 − 800 − 8) = 92.

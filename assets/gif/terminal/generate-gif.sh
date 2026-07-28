@@ -1,26 +1,20 @@
 #!/bin/bash
 #
-# terminal/generate-gif.sh — records the "type the roadmap, run the tool"
-# terminal half of the demo and writes terminal/terminal.gif.
+# Records the "type the roadmap, run the tool" half of the demo into
+# terminal.gif. Needs only Docker. The npx command typed in the recording runs
+# the *published* package inside the container, so this half never sees the local
+# build — that is the screenshot half's job.
 #
-# Self-contained: needs only Docker (running). The npx command typed in the
-# recording runs the *published* yaml-to-gantt package inside the container, so
-# this half never touches the local build (that's the screenshot half's job).
-#
-# terminal.tape is a template; the "# >>> ROADMAP <<<" line is replaced at
-# runtime with the typed-out contents of the roadmap. To keep the recording
-# watchable, the FIRST task types at the tape's readable speed (it teaches the
-# format); every task after it is "pasted" — a short pause, then the block pops
-# in at once (Type@0ms) — since by then the viewer already knows the shape.
-#
-# Recording happens in an isolated staging dir (no pre-existing roadmap.yaml)
-# so nano opens an empty buffer — re-running in place never duplicates the file.
+# terminal.tape is a template whose "# >>> ROADMAP <<<" line is replaced at
+# runtime with the typed-out roadmap. Only the first task types at readable
+# speed, to teach the format; later tasks are "pasted" instantly, since by then
+# the viewer knows the shape and slow typing is just dead screen time.
 #
 # Usage:
 #   bash assets/gif/terminal/generate-gif.sh [roadmap.yaml]
 #
-#   roadmap.yaml   optional path to the roadmap to type (default: ../roadmap.yaml)
-#   PASTE_SPEED    env var: per-char speed for the pasted tasks (default: 0ms)
+#   roadmap.yaml   roadmap to type (default: ../roadmap.yaml)
+#   PASTE_SPEED    per-char speed for the pasted tasks (default: 0ms)
 
 set -euo pipefail
 
@@ -39,14 +33,9 @@ fi
 STAGE="$(mktemp -d "$HOME/.y2g-gif-terminal.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
-# Build the tape: copy the template, but replace the sentinel line with one
-# Type/Enter pair per line of the roadmap. Lines are backtick-delimited so
-# inner double quotes (e.g. description: "...") pass through verbatim — VHS has
-# no string escaping, so `"..."` with embedded quotes would break parsing.
-#
-# Paste-aware: the first `- name:` task types at the tape's global speed; from
-# the second task on, a short pause precedes an instant Type@PASTE_SPEED block,
-# so the remaining tasks read as a single copy-paste rather than slow typing.
+# Replace the sentinel line with one Type/Enter pair per roadmap line. Lines are
+# backtick-delimited because VHS has no string escaping, so a line containing
+# double quotes (description: "...") would break parsing if quoted.
 while IFS= read -r tline || [ -n "$tline" ]; do
   case "$tline" in
     '# >>> ROADMAP <<<'*)

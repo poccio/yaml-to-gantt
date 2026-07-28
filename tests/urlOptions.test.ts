@@ -2,8 +2,8 @@ import { describe, test, expect } from 'vitest';
 import { readUrlOptions } from '../src/urlOptions';
 
 // The CLI hands its flags to the client through the query string (bin/cli.ts),
-// so this parser is one half of a contract with no other guard on it. The
-// literals below are the URLs the CLI actually emits.
+// coupled to this parser by nothing but the literals below — which are the URLs
+// bin/cli.ts actually emits, so change both together.
 describe('readUrlOptions', () => {
   test('reads the file path the CLI passes, percent-decoded', () => {
     const { file } = readUrlOptions('?file=%2Ftmp%2Fmy%20roadmap.yaml');

@@ -9,9 +9,9 @@ import {
 } from '../src/timeline';
 import type { Task } from '../src/parseYaml';
 
-// Every expectation here is hand-derived in this one zone. It is deliberately
-// not UTC: a UTC run hides exactly the local-vs-UTC confusion these tests
-// exist to catch, and New York has a DST transition to pin the day math on.
+// Every expectation here is hand-derived in this one zone, deliberately not UTC:
+// a UTC run hides the local-vs-UTC confusion these tests exist to catch, and New
+// York has a DST transition to pin the day math on.
 const ZONE = 'America/New_York';
 let originalTZ: string | undefined;
 
@@ -21,8 +21,8 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  // Assigning an undefined originalTZ back would set the *string* "undefined",
-  // leaving the process in GMT rather than in the zone it started in.
+  // Assigning an undefined originalTZ back sets the *string* "undefined", which
+  // leaves the process in GMT rather than the zone it started in.
   if (originalTZ === undefined) delete process.env.TZ;
   else process.env.TZ = originalTZ;
 });
@@ -39,20 +39,17 @@ function task(overrides: Partial<Task> = {}): Task {
 }
 
 describe('parseDay', () => {
-  // Bars, gridlines and the today marker all sit on a local-midnight grid.
-  // Parsing as UTC instead ("new Date(s)") lands 2026-07-01 on Jun 30 20:00
-  // local, shifting every bar a day west of UTC.
+  // `new Date(s)` instead lands 2026-07-01 on Jun 30 20:00 local, shifting every
+  // bar a day west of UTC.
   test('reads a date string as local midnight, not UTC midnight', () => {
     expect(parseDay('2026-07-01').getTime()).toBe(new Date(2026, 6, 1).getTime());
   });
 });
 
 describe('addDays', () => {
-  // The day-number header and the hover tooltip walk the grid one column at a
-  // time. Nov 1 2026 is a 25-hour day in New York, so stepping by a fixed
-  // 86_400_000 falls an hour behind and lands on 23:00 of the day before —
-  // printing the same day number twice and labelling every later column a day
-  // behind the bars, which count calendar days.
+  // Nov 1 2026 is a 25-hour day in New York, so stepping the day-number header by
+  // a fixed 86_400_000 lands on 23:00 of the day before: it printed the same day
+  // number twice and then labelled every later column a day behind the bars.
   test('advances one calendar day per step across a fall-back transition', () => {
     const friday = new Date(2026, 9, 30); // Fri Oct 30 2026
 
@@ -67,8 +64,8 @@ describe('addDays', () => {
 });
 
 describe('computeRange', () => {
-  // rangeStart and totalDays are the origin and width of every coordinate in
-  // the chart: bar offsets, month headers, the today marker, initial scroll.
+  // rangeStart and totalDays are the origin and width every other coordinate in
+  // the chart is measured against.
   test('derives the grid from the task dates, padded on both sides', () => {
     const { rangeStart, totalDays } = computeRange([task()]);
 
@@ -78,7 +75,7 @@ describe('computeRange', () => {
   });
 
   // The baseline bars are drawn from these dates, so a range that ignores them
-  // positions them off-grid — at a negative offset when the slip is backwards.
+  // puts them off-grid — at a negative offset when the slip is backwards.
   test('extends the range to cover originallyPlanned dates', () => {
     const slipped = {
       start: '2026-07-10',
@@ -94,18 +91,13 @@ describe('computeRange', () => {
     expect(withoutBaseline.rangeStart.getTime()).toBe(new Date(2026, 6, 6).getTime());
   });
 
-  // Mar 8 2026 is a 23-hour day in New York and Nov 1 a 25-hour one. Every
-  // width and offset here counts calendar days, which is why they all go
-  // through `daysBetween`: it re-pins both ends to UTC midnight, where a day
-  // really is 24 hours, so nothing has to be rounded back into shape.
-  // Elapsed-millisecond arithmetic that truncates comes up a day short across
-  // the spring transition — the March cell reports 20 days instead of 21, and
-  // the grid loses a day. Month widths are asserted separately from totalDays
-  // because the month loop does its own arithmetic and a mutant can bypass
-  // `daysBetween` there alone.
-  //
-  // A naive-ms `Math.round` survives this test: rounding absorbs the missing
-  // hour. The `todayOffset` tests are what catch that one.
+  // Mar 8 2026 is a 23-hour day in New York, Nov 1 a 25-hour one. Truncating
+  // elapsed-millisecond arithmetic comes up a day short across the spring
+  // transition: the March cell reports 20 days instead of 21. Month widths are
+  // asserted separately from totalDays because the month loop does its own
+  // arithmetic, so a mutant can bypass `daysBetween` there alone. A naive-ms
+  // `Math.round` survives this test — rounding absorbs the missing hour — and
+  // the `todayOffset` tests catch that one.
   test('spans a DST transition without losing a day', () => {
     const spring = computeRange([task({ start: '2026-03-01', end: '2026-03-15' })]);
 
@@ -129,8 +121,8 @@ describe('computeRange', () => {
     ]);
   });
 
-  // The week gridlines are a repeating gradient offset by this value; get it
-  // wrong and every week boundary is drawn on the wrong weekday.
+  // The week gridlines are a repeating gradient phased by this value; wrong, and
+  // every week boundary lands on the wrong weekday.
   test('offsets the week gridlines to the first Monday in the range', () => {
     // rangeStart is Sat Jun 27 2026, so the first Monday is Jun 29.
     expect(computeRange([task()]).firstMondayOffset).toBe(2);
@@ -142,9 +134,8 @@ describe('computeRange', () => {
     expect(computeRange([laterTask]).firstMondayOffset).toBe(0);
   });
 
-  // Each month cell is absolutely positioned at `offset` days with `width` days.
-  // They have to tile the grid exactly: a cell that runs long overlaps its
-  // neighbour, and the last one would overhang the end of the timeline.
+  // Month cells are absolutely positioned, so they have to tile the grid exactly:
+  // a cell that runs long overlaps its neighbour or overhangs the timeline.
   test('lays month headers end to end, without overlap or overhang', () => {
     const { months } = computeRange([task({ start: '2026-07-01', end: '2026-09-15' })]);
 
@@ -158,11 +149,10 @@ describe('computeRange', () => {
     ]);
   });
 
-  // The trailing pad can push rangeEnd one day into the next month, leaving a
-  // one-day-wide cell. It still has to be drawn: dropping it (`if (w < 2)
-  // continue`, or any other tidying of the sliver) leaves the last day of the
-  // grid under no month header at all, and the tiling assertion above cannot
-  // see it because none of its cells are that narrow.
+  // The trailing pad can push rangeEnd one day into the next month. Tidying that
+  // sliver away (`if (w < 2) continue`) leaves the last day of the grid under no
+  // month header, and the tiling assertion above cannot see it because none of
+  // its cells are that narrow.
   test('keeps a month cell only one day wide', () => {
     const { totalDays, months } = computeRange([task({ start: '2026-07-10', end: '2026-07-26' })]);
 
@@ -184,13 +174,26 @@ describe('computeRange', () => {
       ['January 2027', 16],
     ]);
   });
+
+  // The degenerate output hasChartableRange exists to keep off screen: Math.min
+  // over no dates is Infinity, so the origin is an Invalid Date and every width
+  // NaN. Nothing throws, which is why the caller has to check rather than catch.
+  // Pinned so that a later tidy-up handing this case a plausible fallback range
+  // cannot quietly make the guard in App.tsx look redundant.
+  test('degenerates instead of throwing when there are no tasks', () => {
+    const { rangeStart, totalDays, firstMondayOffset, months } = computeRange([]);
+
+    expect(rangeStart.getTime()).toBeNaN();
+    expect(totalDays).toBeNaN();
+    expect(firstMondayOffset).toBeNaN();
+    expect(months).toEqual([]);
+  });
 });
 
 describe('scrollShiftDays', () => {
   // An SSE reload is a prop update, not a remount, so scrollLeft survives it
   // while every offset is recomputed against the new rangeStart. Without this
-  // correction the viewport keeps its pixel and loses its date: a roadmap that
-  // grows an earlier task slid the left edge 10 days into the past.
+  // correction the viewport keeps its pixel and loses its date.
   test('keeps the same date at the left edge when the roadmap grows earlier', () => {
     const existing = task({ start: '2026-07-01', end: '2026-07-31' });
     const base = computeRange([existing]);
@@ -208,9 +211,8 @@ describe('scrollShiftDays', () => {
       .toBe(addDays(base.rangeStart, scrolledDays).getTime());
   });
 
-  // The other direction — deleting the earliest task — has to scroll back, so
-  // the sign is load-bearing rather than a magnitude with an arbitrary
-  // convention. A flipped sign moves the viewport twice as far the wrong way.
+  // Deleting the earliest task has to scroll the other way, so the sign is
+  // load-bearing: flipped, it moves the viewport twice as far the wrong way.
   test('runs negative when the origin moves later, and zero when it holds', () => {
     const early = new Date(2026, 5, 17);
     const late = new Date(2026, 5, 27);
@@ -219,9 +221,9 @@ describe('scrollShiftDays', () => {
     expect(scrollShiftDays(late, new Date(2026, 5, 27))).toBe(0);
   });
 
-  // The shift is multiplied by a fixed day width, so it has to be a count of
-  // calendar days. Mar 8 2026 is 23 hours long in New York: elapsed-millisecond
-  // arithmetic reports 13.96 days here and drags the viewport off the grid.
+  // The shift is multiplied by a fixed day width, so it has to be whole calendar
+  // days. Mar 8 2026 is 23 hours in New York: elapsed-ms arithmetic reports 13.96
+  // days here and drags the viewport off the grid.
   test('counts calendar days across a DST transition', () => {
     expect(scrollShiftDays(new Date(2026, 2, 15), new Date(2026, 2, 1))).toBe(14);
   });
@@ -230,7 +232,7 @@ describe('scrollShiftDays', () => {
 describe('todayOffset', () => {
   // Regression: this read UTC date parts while the grid is local, so the marker
   // and the opening viewport sat a day off for the width of the UTC offset every
-  // day — evening hours west of UTC, small hours east of it.
+  // day — evenings west of UTC, small hours east of it.
   test('uses the local calendar day, not the UTC one', () => {
     // 22:00 on Jul 27 in New York is already Jul 28 in UTC.
     const offset = todayOffset(new Date(2026, 6, 1), new Date(2026, 6, 27, 22, 0));
@@ -240,8 +242,7 @@ describe('todayOffset', () => {
   });
 
   // Hiding the marker off-range and clamping the initial scroll both depend on
-  // this staying unclamped, so a roadmap wholly in the past or future still
-  // reports how far away today is.
+  // this staying unclamped.
   test('runs negative before the range and past its end after it', () => {
     const rangeStart = new Date(2026, 6, 1);
 
@@ -251,10 +252,8 @@ describe('todayOffset', () => {
 });
 
 describe('hasChartableRange', () => {
-  // computeRange derives its origin from Math.min over the task dates, which
-  // is Infinity for an empty list — rangeStart Invalid Date, totalDays NaN,
-  // and a chart of zero bars and zero day columns with no error anywhere.
-  // App renders the empty state instead, and this is that decision.
+  // The decision that keeps computeRange's degenerate output (pinned above) off
+  // screen: a zero-task roadmap is a valid parse, so App shows the empty state.
   test('rejects a roadmap with no tasks', () => {
     expect(hasChartableRange([])).toBe(false);
   });

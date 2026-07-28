@@ -50,6 +50,6 @@ if (!noOpen) {
     else if (platform === 'win32') execSync(`start "" "${url}"`);
     else execSync(`xdg-open "${url}"`);
   } catch {
-    // Browser open failed silently — URL is printed, user can open manually
+    // Opening is a convenience; the URL is printed above either way
   }
 }

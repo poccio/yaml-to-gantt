@@ -1,40 +1,32 @@
 /**
- * The chart's pixel grid.
- *
- * Kept out of `timeline.ts` on purpose: that module is date-space only —
- * calendar days, DST, no pixels anywhere — and mixing the two dissolves the
- * one boundary it holds. Everything here is a total function of its arguments,
- * so it lives in the node test suite rather than needing a DOM.
+ * The chart's pixel grid, kept out of `timeline.ts`, which is date-space only.
+ * Nothing here reads the DOM, so all of it is testable in the node suite.
  */
 
 import type { Task } from './parseYaml';
 import { daysBetween, parseDay } from './timeline';
 
-/** Width of one day column at rest, before any stretch to fill the card. */
-export const DAY_W = 40;
-/** Width of the sticky task-label column on the left of every row. */
+export const BASE_DAY_W = 40;
 export const LABEL_W = 280;
 
 /**
- * Day-column width actually used for rendering.
- *
  * A timeline shorter than the card stretches to fill it, so the chart does not
- * end in dead space. A longer one holds at `DAY_W` and scrolls instead of
- * compressing. Returns `DAY_W` before the container has been measured.
+ * end in dead space; a longer one holds at `BASE_DAY_W` and scrolls rather than
+ * compressing into an unreadable smear.
  */
 export function effectiveDayW(containerWidth: number, totalDays: number): number {
   return containerWidth > 0
-    ? Math.max(DAY_W, (containerWidth - LABEL_W) / totalDays)
-    : DAY_W;
+    ? Math.max(BASE_DAY_W, (containerWidth - LABEL_W) / totalDays)
+    : BASE_DAY_W;
 }
 
 /**
- * The day offset under the cursor, or `null` when the cursor is not over a day.
+ * The day offset under the cursor, `null` when there is no day there.
  *
- * The label column is sticky and the timeline scrolls beneath it, so the page-x
- * of the pointer means nothing until both are subtracted out. `null` covers the
- * two off-grid cases: over the label column, and past the end of the grid in
- * the `flex: 1` slack of the timeline cell.
+ * The label column is sticky and the timeline scrolls beneath it, so the
+ * pointer's page-x means nothing until both are subtracted out. Two off-grid
+ * cases: over the label column, and past the last day in the `flex: 1` slack of
+ * the timeline cell.
  */
 export function hoverOffsetAt({
   clientX, containerLeft, scrollLeft, dayW, totalDays,
@@ -58,15 +50,13 @@ export interface BarGeometry {
   ghost: { left: number; width: number } | null;
 }
 
-/** Absolute floor on a bar's width, so a one-day task stays hoverable. */
+/** Floor on a bar's width, so a one-day task stays visible and hoverable. */
 const MIN_BAR_W = 8;
 
 /**
- * Where a task's bar — and its baseline ghost, if it has one — sit on the grid.
- *
  * End dates are inclusive: a Jul 1 to Jul 11 task covers eleven columns. A
- * baseline needs both `originallyPlanned` dates; one alone describes no bar, so
- * it is ignored rather than half-drawn from the grid origin.
+ * baseline needs both `originallyPlanned` dates; one alone is ignored rather
+ * than half-drawn from the grid origin.
  */
 export function taskBarGeometry(task: Task, rangeStart: Date, dayW: number): BarGeometry {
   const startOff = daysBetween(rangeStart, parseDay(task.start));
@@ -90,20 +80,17 @@ export function taskBarGeometry(task: Task, rangeStart: Date, dayW: number): Bar
   };
 }
 
-// Chips are measured, not laid out — the flip decision happens during render,
-// before the DOM exists. These approximate a monospace 13px chip: per-character
-// advance, horizontal padding, and the flex gap between adjacent chips.
+// `chipX` decides during render, before the DOM can be measured, so these
+// approximate a monospace 13px chip.
 const CHIP_CHAR_W = 6.2;
 const CHIP_PADDING = 12;
 const CHIP_GAP = 3;
 
 /**
- * Left offset for a task's assignee chips.
- *
- * They sit past the right end of the bar, unless that would run them off the
- * grid — then they flip to the bar's left, but only if there is room there.
- * A bar that overflows on the right and starts near the origin keeps its chips
- * on the right rather than flipping to a negative offset.
+ * Chips sit past the right end of the bar, unless that runs them off the grid
+ * where they would be clipped — then they flip to its left, but only if there is
+ * room: a bar that overflows right and starts near the origin keeps its chips on
+ * the right rather than flipping to a negative offset.
  */
 export function chipX({
   barLeft, barW, assignees, totalDays, dayW,
