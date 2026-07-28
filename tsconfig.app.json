@@ -1,0 +1,26 @@
+{
+  // Browser code, bundled by Vite. `moduleResolution: bundler` matches what
+  // Vite does — extensionless relative imports are legal here and nowhere else.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "paths": {
+      "react": ["./node_modules/preact/compat"],
+      "react-dom": ["./node_modules/preact/compat"]
+    },
+
+    // No ambient @types at all. Without this every @types package on disk is
+    // visible, so `process.env` in a component typechecks clean and then breaks
+    // in the browser.
+    "types": [],
+
+    // Checking only — Vite emits the browser bundle, tsc never does.
+    "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuild/app.tsbuildinfo"
+  },
+  "include": ["src"]
+}

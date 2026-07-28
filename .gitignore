@@ -9,6 +9,10 @@ server/*.js
 bin/*.js
 .build-server/
 
+# tsc --build output: incremental caches, and the node project's declarations
+# (which tsconfig.test.json consumes across the project reference)
+.tsbuild/
+
 # vite
 .vite/
 

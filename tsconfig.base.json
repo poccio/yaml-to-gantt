@@ -1,0 +1,14 @@
+{
+  // Shared strictness. Every per-runtime config extends this, so these options
+  // cannot drift apart between the browser, node and test projects.
+  "compilerOptions": {
+    "target": "ES2022",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true
+  },
+  "exclude": ["node_modules"]
+}

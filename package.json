@@ -19,9 +19,9 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build && pnpm build:server",
-    "build:server": "tsc -p tsconfig.server.json && cp .build-server/server/*.js server/ && cp .build-server/bin/*.js bin/ && rm -rf .build-server",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "build": "pnpm typecheck && vite build && pnpm build:server",
+    "build:server": "tsc --build tsconfig.server.json --force && cp .build-server/server/*.js server/ && cp .build-server/bin/*.js bin/ && rm -rf .build-server",
+    "typecheck": "tsc --build",
     "test": "vitest run",
     "prepublishOnly": "pnpm build"
   },

@@ -1,0 +1,18 @@
+{
+  // The vitest suite. It imports browser code and checks it as source, so it
+  // extends the app project rather than restating its JSX and resolution
+  // settings — the two cannot drift apart this way. Only the differences below
+  // are the test runtime's own: node's ambient types, and node's globals.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "tsBuildInfoFile": ".tsbuild/test.tsbuildinfo"
+  },
+
+  // This reference is the point of the file: without it, importing
+  // `../server/index.js` pulls server and bin source into this graph and checks
+  // them under bundler rules, which is not how node runs them. With it, those
+  // imports resolve to the node project's generated declarations instead.
+  "include": ["tests"],
+  "references": [{ "path": "./tsconfig.server.json" }]
+}
