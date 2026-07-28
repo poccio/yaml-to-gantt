@@ -17,15 +17,15 @@ projects:
     - name: Landing page
       start: 2025-07-07
       end: 2025-07-24
-      originallyPlannedStart: 2025-07-07             # optional baseline for delay visualization (both or neither)
+      originallyPlannedStart: 2025-07-07             # optional baseline, both or neither
       originallyPlannedEnd: 2025-07-18
       assignees: [Bob, Carol]
 ```
 
-`src/parseYaml.ts` flattens this into `Task[]` and **validates every date**
-(`YYYY-MM-DD`, and a day that really exists). Keep that validation: one Invalid
-Date poisons the min/max in `computeRange` and silently blanks the *whole* chart,
-not just the bad row. `description` is raw HTML — input is trusted.
+`src/parseYaml.ts` flattens this into `Task[]` and **validates every date**. Keep
+that validation: one Invalid Date poisons the min/max in `computeRange` and
+silently blanks the *whole* chart, not just the bad row. `description` is raw
+HTML — input is trusted.
 
 ## Architecture
 
@@ -48,75 +48,47 @@ src/
   urlOptions.ts     Query string → CLI options
   themes.ts         DARK / LIGHT tokens
 tests/              One file per module; GanttChart.test.tsx is the only jsdom file
-.github/workflows/
-  publish.yml       Release → typecheck, test, stamp version, publish to npm
-  validate.yml      pull_request → typecheck, test
-assets/gif/         Manual demo-GIF pipeline; each script's header is its usage doc
-index.html          Vite entry + inline pre-paint theme script
-roadmap.yaml        Example input
-vite.config.js      Preact alias, vitest config
-tsconfig.base.json  Shared strictness — app and server extend it, test extends app
-tsconfig.app.json   src/ — browser, bundler resolution
-tsconfig.server.json  server/ + bin/ — nodenext, emits the shipped JS
-tsconfig.test.json  tests/ — extends app, adds node types, references server
-tsconfig.json       Solution file — owns no source, just references the three
+dist-server/        Gitignored — bin/ + server/ compiled, and what the tarball runs
 ```
-
-`bin/*.js` and `server/*.js` are gitignored build output, shipped in the tarball.
-
-`pnpm typecheck` is `tsc --build`, which checks each project under its own
-runtime's rules. Two of those settings are load-bearing and were silent bugs
-before they existed: `tsconfig.app.json` sets `"types": []`, without which
-`process.env` in a component typechecks clean and dies in the browser; and
-`tsconfig.test.json` *references* the server project rather than including it.
-Both files explain themselves — read them before editing either.
 
 ## Dates
 
-Everything from `parseDay` onward is a `Date` at local midnight, and all day math
-goes through `src/timeline.ts`.
+All day math goes through `src/timeline.ts`, on `Date`s at local midnight.
 
 - **Never move by raw milliseconds.** A DST day is 23 or 25 hours, so
-  `getTime() + n * 86_400_000` drifts onto 23:00 of the previous date and stays
-  there — that shipped as a duplicated column in the day header. Use `addDays`.
+  `getTime() + n * 86_400_000` lands on 23:00 of the previous date and stays there
+  — that shipped as a duplicated column in the day header. Use `addDays`.
 - **js-yaml hands back UTC midnight and `parseYaml` reads UTC parts back out.**
-  That pairing is what makes it correct; reformatting it locally shifts every
-  date a day west of UTC.
+  That pairing is what makes it correct; reformatting either half locally shifts
+  every date a day west of UTC.
 - Local midnight doesn't always exist (Chile starts DST at midnight), so never
   assert it in a test.
 
 ## Chart layout
 
-- Rows are flex: sticky label cell + timeline cell at `flex: 1, minWidth:
-  totalDays * BASE_DAY_W`. **Never add `minWidth: '100%'` to a wrapper** —
-  phantom empty-space bug.
-- Two `useLayoutEffect`s own `scrollLeft`: the focus-today latch, and the
-  re-anchor that holds the same *date* at the left edge when a reload moves
-  `rangeStart`. Both are subtler than they look and both must use `BASE_DAY_W`,
-  never `effectiveDayW`. Their comments in `GanttChart.tsx` are the spec — read
-  those before touching either.
-- `computeRange` pads asymmetrically (`−RANGE_PAD` leading, `+RANGE_PAD + 2`
-  trailing), so read `totalDays` off the function instead of re-deriving it.
+`src/chartLayout.ts` docstrings are the spec for the math. What constrains code
+outside it:
 
-## Testing
-
-`pnpm test` (`vitest run`), node environment.
-
-- **Logic worth testing lives in a pure module, not a component.** `timeline.ts`,
-  `chartLayout.ts`, `popover.ts` and `bin/cliArgs.ts` were all extracted for that
-  reason. Extract rather than reach for a heavier harness.
-- `tests/` is typechecked by `tsconfig.test.json`, which is what catches a
-  misspelled property in `toBeUndefined()` or a `Task` fixture missing fields —
-  both pass vitest while asserting nothing. Don't move tests out of that project.
-- `tests/timeline.test.ts` pins `TZ=America/New_York` and hand-derives every
-  expectation in that zone; the DST transition is the point. Pass `todayOffset`
-  an explicit `now`.
-- **jsdom has no layout engine**: `clientWidth` and `getBoundingClientRect()`
-  read 0, so only `scrollLeft` assertions mean anything and real geometry needs a
-  browser. Keep DOM tests in `GanttChart.test.tsx` — jsdom costs ~800ms per file.
-- Prefer positive assertions; `not.toContain(x)` passes while state is `null`.
-- `App.tsx` is untested — mounting it needs `matchMedia`, `EventSource` and
-  `fetch` stubs.
+- **Never put `minWidth: '100%'` on a wrapper** — phantom empty-space bug. Pixel
+  min-widths are the opposite case and required: rows go through `rowShell` at
+  `rowMinW(totalDays)`, or their sticky label cells escape their containing block
+  partway along a scrolling timeline.
+- **In timeline coordinates the label column's right edge is `scrollLeft`.** That
+  identity is why `scrollLeft` is mirrored into state, and it drives both
+  `isBehindLabelColumn` and `hoverPillCenter`.
+- Three `useLayoutEffect`s touch scroll. The focus-today latch and the `rangeStart`
+  re-anchor must use `BASE_DAY_W`, never `effectiveDayW`; the third only mirrors
+  `scrollLeft` and is **declared last**, so it sees what the other two just set.
+- **Hover dimming goes on the row, never on its cells** — a faded sticky label cell
+  goes translucent over the timeline it exists to occlude. The consequence is the
+  trap: a faded row is a stacking context, so **nothing overlaying the rows from
+  outside can reach the label column**, whatever zIndex the labels carry. The today
+  bar clips its own glow instead of being covered.
+- **The crosshair stores the cursor's `clientX`, not the day offset it resolved
+  to.** Scrolling puts a new day under a still pointer, and because the pill is
+  clamped, a stale offset parks a wrong date at the label edge.
+- `computeRange` pads asymmetrically, so read `totalDays` off it instead of
+  re-deriving it.
 
 ## CLI
 
@@ -124,25 +96,27 @@ goes through `src/timeline.ts`.
 yaml-to-gantt <file.yaml> [--no-open] [--no-assignee-filter] [--help|-h]
 ```
 
-- Add flags to `OPTIONS` in `bin/cliArgs.ts`, not `bin/cli.ts`. `cliArgs` is pure
-  and tested; `cli.ts` binds a socket at module scope and can't be imported by a
-  test. `parseArgs` then rejects unknown flags for free.
+- Add flags to `OPTIONS` in `bin/cliArgs.ts`, never to `bin/cli.ts`: `cliArgs` is
+  pure and tested, while `cli.ts` binds a socket at module scope and can't be
+  imported by a test. `parseArgs` then rejects unknown flags for free.
 - Flags cross to the client as `?file=…&assigneeFilter=off` — `bin/cli.ts` builds
-  it, `readUrlOptions` parses it, and only the parsing half is tested, so change
-  both sides together.
-- `App.tsx` reads those options in a `useState` initializer, **not at module
-  scope**: touching `window` on import throws outside a browser.
+  it, `readUrlOptions` parses it, and only the parsing half is tested. Change both
+  sides together.
+- **The query string is not guaranteed to be there.** Someone can type
+  `localhost:3849/` by hand and the chart still renders, so anything read off the
+  URL is a preference, not a source of truth. The filename has a server-side
+  fallback (`X-Yaml-Path` on `/api/yaml`); `assigneeFilter=off` still has the hole,
+  and the fix shape is the same.
 
 ## Theming
 
-Tokens are `DARK` / `LIGHT` in `src/themes.ts`; use `theme.*` and add new colors
-there. Don't copy the surrounding code — about 60 raw color literals remain in
-`App.tsx` and `GanttChart.tsx` (`ACCENT` duplicates `theme.accent`, 18 hand-typed
-`rgba(79,142,247,…)`, plus `Pill`'s own palette). `PROJECT_COLORS` and
-`GHOST_BARS` are intentionally theme-independent; everything else is drift.
+Tokens are `DARK` / `LIGHT` in `src/themes.ts` — use `theme.*` and add new colors
+there. **Don't copy the surrounding code:** ~60 raw color literals remain in
+`App.tsx` and `GanttChart.tsx`, and they are drift, not the pattern.
+`PROJECT_COLORS` and `GHOST_BARS` are intentionally theme-independent.
 
-The inline script in `index.html` duplicates `getInitialTheme`'s logic to avoid a
-flash of the wrong theme — keep the two in sync.
+`index.html`'s inline script duplicates `getInitialTheme` to avoid a flash of the
+wrong theme — keep the two in sync.
 
 ## Releasing
 
@@ -150,7 +124,17 @@ flash of the wrong theme — keep the two in sync.
 source of truth, and `publish.yml` stamps it with `npm pkg set` (pnpm has no `pkg`
 command).
 
-`publish.yml`'s `pnpm typecheck` and `pnpm test` are **the only gate a release
-passes**: `validate.yml` is `pull_request`-only, `main` is unprotected, and
-releases are cut from direct pushes. `prepublishOnly` is not a gate — it runs
-`vite build`, which strips types without checking them.
+## Conventions
+
+- Comments explain **why** — the edge case, the alternative that failed, the
+  constraint that is invisible locally. Never what the line already says.
+- **One fact, one place.** Call sites and tests point at the canonical docstring
+  instead of re-telling it; re-narration is how this codebase and this file rot.
+- Test names say what and assertions say how, so comment only the bug a case exists
+  to prevent, or hand-derived arithmetic.
+- **Logic worth testing goes in a pure module, not a component** — `timeline.ts`,
+  `chartLayout.ts`, `popover.ts` and `cliArgs.ts` were all extracted for that.
+  Extract rather than reach for a heavier harness: jsdom has no layout engine, so
+  `clientWidth` and `getBoundingClientRect()` read 0, only `scrollLeft` assertions
+  mean anything, and it costs ~800ms per file.
+- Rename or extract before explaining.
