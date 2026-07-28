@@ -52,10 +52,9 @@ export default function App() {
       try {
         const r = await fetch('/api/yaml');
         if (!r.ok || (r.headers.get('content-type') ?? '').includes('text/html')) return;
-        // `file` is authoritative when it is there, but it is absent whenever the
-        // page was opened bare at localhost/ rather than through the URL the CLI
-        // prints. The response says which file the server is actually watching,
-        // which is the same answer and always available.
+        // `?file=` is only a preference: it is gone whenever the page was opened
+        // bare at localhost/ instead of through the URL the CLI prints, and the
+        // response header is the same answer, always available.
         const served = r.headers.get('X-Yaml-Path');
         const text = await r.text();
         if (text) loadYaml(text, file ?? (served ? decodeURIComponent(served) : undefined));

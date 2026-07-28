@@ -28,9 +28,8 @@ describe('server', () => {
   let server: http.Server | undefined;
   let tmpFile: string | undefined;
 
-  // A stand-in for the built client, so these tests do not depend on whether the
-  // checkout has been built and never write into the real dist/. sirv snapshots
-  // the tree while `start` constructs it, so it is written once, up front.
+  // A stand-in for the built client, so these tests never touch the real dist/.
+  // sirv snapshots the tree while `start` constructs it, so it is written up front.
   let distDir: string;
   const HASHED_ASSET = 'assets/index-abc123.js';
 
@@ -63,10 +62,9 @@ describe('server', () => {
     return `http://localhost:${port}`;
   }
 
-  // Every other test injects `distDir`, so this is the only cover on the default.
-  // It is release-critical and fails silently — a wrong root serves 404s, and the
-  // emitted server sits one directory deeper than this source, so counting `..`
-  // hops would be right here and wrong in the tarball.
+  // Every other test injects `distDir`, so this is the only cover on the default —
+  // which fails silently, serving 404s, and cannot be found by counting `..` hops
+  // because the emitted server sits a directory deeper than this source.
   it('defaults its static root to the package dist/', () => {
     const packageRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
     expect(DIST_DIR).toBe(path.join(packageRoot, 'dist'));
@@ -80,16 +78,12 @@ describe('server', () => {
     expect(res.status).toBe(200);
     expect(res.body).toBe(yamlContent);
     expect(res.headers['content-type']).toBe('text/plain');
-    // Refetched on every SSE reload with a plain fetch(), so a cached copy would
-    // replay the file the client was just told had changed.
     expect(res.headers['cache-control']).toBe('no-store');
   });
 
   it('names the file it is serving on /api/yaml', async () => {
-    // The header is the only place the client can learn the name when the page
-    // was opened bare at localhost/, without the ?file= the CLI puts in the URL.
-    // Percent-encoded because Node writes header values as latin1 and would
-    // mangle any path outside that range — hence the accent in the fixture.
+    // Accented on purpose: Node writes header values as latin1, so an unencoded
+    // path outside that range arrives mangled.
     const origin = await serve('projects: {}', 'yaml-to-gantt-tëst piano.yaml');
 
     const res = await fetchUrl(`${origin}/api/yaml`);
@@ -115,8 +109,7 @@ describe('server', () => {
     const origin = await serve('projects: {}');
 
     // `single` answers an extensionless miss with index.html, so keying the
-    // immutable header off the `/assets/` prefix alone would pin HTML — at that
-    // URL, for a year. Only a hashed *filename* earns it.
+    // immutable header off the `/assets/` prefix alone would pin HTML for a year.
     const fallback = await fetchUrl(`${origin}/assets/not-a-real-file`);
     expect(fallback.status).toBe(200);
     expect(fallback.headers['content-type']).toContain('text/html');
@@ -126,8 +119,7 @@ describe('server', () => {
   it('answers a revalidation of index.html with 304', async () => {
     const origin = await serve('projects: {}');
 
-    // What `no-cache` buys only pays off if the revalidation is cheap, and sirv
-    // honors If-None-Match alone — drop `etag: true` and this becomes a full 200.
+    // Drop `etag: true` and `no-cache` costs a full 200 on every reload.
     const first = await fetchUrl(`${origin}/`);
     expect(first.headers['etag']).toMatch(/^W\/"\d+-\d+"$/);
 

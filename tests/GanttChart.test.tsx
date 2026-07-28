@@ -204,10 +204,6 @@ function spanningToday(): Task {
 }
 
 describe('today marker', () => {
-  // Nothing clips the marker to the visible timeline: behind the label column it
-  // is hidden only by that column painting over it, and its 14px glow spills past
-  // that edge — a stray blue dot at the seam under the header. So it has to stop
-  // being drawn once today scrolls behind the labels.
   test('draws the line, the header dot and the full-height bar while today is in view', () => {
     const stubs = installLayoutStubs(1182);
     try {
@@ -231,8 +227,8 @@ describe('today marker', () => {
     }
   });
 
-  // Symmetry, and the boundary itself: at exactly TODAY_X today is the leftmost
-  // visible column, so hiding it there would drop the marker a day early.
+  // At exactly TODAY_X today is the leftmost visible column, so hiding it there
+  // would drop the marker a day early.
   test('draws it again the moment today clears the label column', () => {
     const stubs = installLayoutStubs(1182);
     try {
@@ -247,8 +243,8 @@ describe('today marker', () => {
     }
   });
 
-  // The rows are faded as groups, so their labels cannot outrank the bar however
-  // high their zIndex: a glow reaching past the label column edge lands on them.
+  // The pure clip is covered in chartLayout.test.ts; this pins that the component
+  // feeds it the *live* scrollLeft rather than a stale mirror of it.
   test('lets the glow reach the label column edge and no further', () => {
     const stubs = installLayoutStubs(1182);
     try {
@@ -296,9 +292,6 @@ describe('hover pill', () => {
     }
   });
 
-  // The cursor cannot reach the label column, so the hovered day is always at
-  // least partly visible — but centred on a column that is mostly covered, the
-  // pill sits half under an opaque column reading "l 7".
   test('slides the pill clear of the label column edge', () => {
     const stubs = installLayoutStubs(1182);
     try {
@@ -314,9 +307,9 @@ describe('hover pill', () => {
     }
   });
 
-  // Clamping a pill whose day has scrolled away parks a wrong date at the label
-  // edge — it read "Aug 10" in September. The crosshair names the day under the
-  // pointer, so a scroll under a still cursor has to re-derive which day that is.
+  // With the pill clamped, a stale offset parks a wrong date at the label edge
+  // rather than scrolling it harmlessly out of sight — it read "Aug 10" in
+  // September.
   test('renames the pill when a scroll moves a new day under the cursor', () => {
     const stubs = installLayoutStubs(1182);
     try {
@@ -336,10 +329,8 @@ describe('hover pill', () => {
 });
 
 describe('hover dimming', () => {
-  // Dimming must land on the row, never on its cells. A sticky label cell at
-  // opacity 0.4 is translucent over the timeline cell it exists to occlude, so
-  // the week bands and any bar scrolling underneath show through it. Faded as a
-  // row, the label still paints opaquely over the timeline.
+  // The cell assertions are the point: a faded sticky label cell goes translucent
+  // over the timeline it exists to occlude. See `dimmed` in GanttChart.tsx.
   test('fades whole rows and leaves the cells opaque', () => {
     const stubs = installLayoutStubs(1182);
     try {

@@ -22,16 +22,14 @@ function findDistDir(from: string): string {
   return path.join(dir, 'dist');
 }
 
-/** Exported so a test can pin it — no other test exercises the default. */
 export const DIST_DIR = findDistDir(__dirname);
 
 interface StartOptions {
   port?: number;
   /**
    * Static root. Overridable so tests can serve a fixture tree they own instead
-   * of the real build output, whose presence and contents depend on whether the
-   * checkout has been built. sirv snapshots the directory as it is constructed,
-   * so whatever is to be served must be on disk before `start` is called.
+   * of build output that may or may not be there. sirv snapshots the directory
+   * as it is constructed, so write the fixture before calling `start`.
    */
   distDir?: string;
 }
@@ -42,15 +40,15 @@ export function start(
 ): Promise<http.Server> {
   // sirv sends no Cache-Control, leaving browsers free to reuse index.html without
   // revalidating. It is the only unhashed name here, so a stale copy pins the
-  // previous build's bundle and an upgraded package serves the old app.
+  // previous build's bundle and an upgraded package serves the old app. `etag` is
+  // what makes the revalidation a 304 — sirv honors If-None-Match alone.
   const serveStatic = sirv(distDir, {
     single: true,
     etag: true,
     setHeaders(res, pathname) {
-      // Only a content-hashed name may be pinned, and the extension is part of
-      // the test rather than the `/assets/` prefix alone: `single` answers an
-      // extensionless miss with index.html, so a bare prefix would pin *HTML*
-      // under that URL for a year.
+      // The extension is part of the test, not the `/assets/` prefix alone:
+      // `single` answers an extensionless miss with index.html, so a bare prefix
+      // would pin *HTML* under that URL for a year.
       const isHashed = /^\/assets\/.+\.[a-z0-9]+$/i.test(pathname);
       res.setHeader(
         'Cache-Control',
@@ -81,11 +79,10 @@ export function start(
         // The client refetches this on every SSE reload with a plain fetch(), so
         // a cached copy would replay the file it was just told had changed.
         'Cache-Control': 'no-store',
-        // Which file this content came from. The client normally reads the name
-        // off the `?file=` the CLI builds, but that is gone the moment someone
-        // opens localhost/ by hand — and only the server knows the answer.
-        // Percent-encoded: Node writes header values as latin1, so an accented
-        // or non-Latin path would arrive mangled.
+        // Which file this came from. The client prefers the `?file=` the CLI
+        // builds, but that is gone the moment someone opens localhost/ by hand,
+        // and only the server knows the answer. Percent-encoded because Node
+        // writes header values as latin1 and would mangle an accented path.
         'X-Yaml-Path': encodeURIComponent(yamlPath),
       });
       res.end(content);

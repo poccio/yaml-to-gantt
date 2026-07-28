@@ -172,10 +172,9 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     }
   }, [rangeStart]);
 
-  // Two things have to know where the sticky label column currently sits over the
-  // timeline — the today marker and the hover pill — and in timeline coordinates
-  // that edge *is* scrollLeft. Mirrored into state on every scroll, the same way
-  // hoverOffset mirrors the cursor on every mousemove.
+  // The today marker and the hover pill both need to know where the sticky label
+  // column currently sits over the timeline, so scrollLeft is mirrored into state
+  // the same way hoverOffset mirrors the cursor.
   const [scrollLeft, setScrollLeft] = useState(0);
   const syncScrollLeft = () => {
     const container = containerRef.current;
@@ -187,12 +186,8 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   useLayoutEffect(syncScrollLeft, [containerWidth, rangeStart]);
 
   // Where the marker goes, or null when there is none to draw: today is outside
-  // the range, or parked behind the label column.
-  //
-  // Nothing clips the marker to the *visible* timeline, so behind the label
-  // column it is hidden only by opaque paint on top — and its glow spills 14px
-  // past whatever that is, through the hairline seam under the header, as a stray
-  // blue dot. Not drawing it is the fix; covering it is not.
+  // the range, or behind the label column, where its glow would escape as a stray
+  // blue dot at the seam under the header — see `isBehindLabelColumn`.
   const todayX = todayVisibleOffset !== null &&
     !isBehindLabelColumn({ offset: todayVisibleOffset, dayW, scrollLeft })
     ? todayVisibleOffset * dayW
@@ -221,10 +216,9 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     `,
   };
 
-  // The cursor's own x, kept so a scroll can re-derive the day under it. The
-  // crosshair names the day the pointer is on, and scrolling puts a different
-  // day there without the pointer moving — holding the derived offset instead
-  // left the pill reading "Aug 10" halfway through September.
+  // The cursor's own x, not the offset it resolved to: scrolling puts a different
+  // day under a still pointer, and holding the derived offset left the pill
+  // reading "Aug 10" halfway through September.
   const hoverClientX = useRef<number | null>(null);
   const syncHover = () => {
     const container = containerRef.current;
@@ -308,6 +302,9 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
   // cell's zIndex inside the row: anything overlaying the rows from outside
   // outranks the labels, whatever their zIndex says. Nothing may be painted over
   // the label column from out there — see `todayBarClip`.
+  //
+  // Same reason the today bar is one full-height element rather than a segment
+  // per row: a segment inside a timeline cell fades with it.
   const dimmed = (faded: boolean): JSX.CSSProperties => ({
     opacity: faded ? 0.4 : 1,
     transition: 'opacity 0.15s ease',
@@ -414,10 +411,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
         </div>
       </div>
 
-      {/* One full-height overlay at the end, not a segment per row: hover dimming
-          fades the timeline cell, and a segment living inside one would fade with
-          it. Staying outside the rows is also why it has to stay outside their
-          stacking contexts — see `dimmed`. */}
+      {/* Wraps the rows so the today bar can span them all — see `dimmed`. */}
       <div style={{ position: 'relative' }}>
       {projects.map(proj => {
         const rgb = hexRgb(proj.color);
@@ -610,9 +604,6 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             width: 2,
             background: `linear-gradient(180deg, ${ACCENT}, rgba(79,142,247,0.6))`,
             boxShadow: `0 0 ${TODAY_GLOW_BLUR}px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,
-            // The rows below are faded as groups, so their labels cannot outrank
-            // this bar however high their zIndex — the glow has to stop at the
-            // label column rather than be painted over.
             clipPath: todayBarClip({ x: todayX, scrollLeft, blur: TODAY_GLOW_BLUR }),
             zIndex: 4, pointerEvents: 'none',
           }} />

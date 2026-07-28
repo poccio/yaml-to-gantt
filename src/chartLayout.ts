@@ -20,7 +20,6 @@ export function effectiveDayW(containerWidth: number, totalDays: number): number
     : BASE_DAY_W;
 }
 
-/** The timeline's floor width, held once the roadmap is too long to fit. */
 export function timelineMinW(totalDays: number): number {
   return totalDays * BASE_DAY_W;
 }
@@ -62,11 +61,10 @@ export function hoverOffsetAt({
 /**
  * Is the day column starting at `offset` covered by the sticky label column?
  *
- * The label column stays parked over the first `LABEL_W` of the viewport while
- * the timeline scrolls beneath it, so in timeline-local coordinates it covers
- * everything left of `scrollLeft`. Callers use this to *not draw* what the label
- * column would otherwise have to hide: hiding by paint order only works for
- * opaque paint, and a glow spills past the edge of whatever covers it.
+ * In timeline coordinates the label column's right edge *is* `scrollLeft`.
+ * Callers use this to *not draw* what the label column would otherwise have to
+ * hide: hiding by paint order only works for opaque paint, and a glow spills
+ * past the edge of whatever covers it.
  *
  * A column straddling the edge counts as behind — the markers this guards are
  * drawn at the column's left edge, which is the pixel being asked about.
@@ -84,10 +82,9 @@ export function isBehindLabelColumn({ offset, dayW, scrollLeft }: {
  * label column's edge.
  *
  * The bar is never drawn behind the labels, but it is drawn *flush against* them
- * — and a 14px blur around a 2px line reaches well past the edge, onto labels
- * that sit inside faded rows and cannot outrank it. Nothing is lost by cutting
- * it: everything left of that edge is under an opaque column anyway. The other
- * three sides stay open so the glow is unchanged everywhere else.
+ * — and `blur` around a 2px line reaches well past the edge, onto labels that sit
+ * inside faded rows and cannot outrank it. Nothing is lost by cutting it:
+ * everything left of that edge is under an opaque column anyway.
  */
 export function todayBarClip({ x, scrollLeft, blur }: {
   x: number;
@@ -104,7 +101,6 @@ export function todayBarClip({ x, scrollLeft, blur }: {
 const PILL_CHAR_W = 7.2;
 const PILL_PADDING_X = 9;
 
-/** Roughly how wide the pill reading `label` will come out. */
 export function hoverPillW(label: string): number {
   return label.length * PILL_CHAR_W + PILL_PADDING_X * 2;
 }
@@ -116,8 +112,8 @@ export function hoverPillW(label: string): number {
  * The cursor cannot reach the label column, so the hovered day is always at
  * least partly visible — but the *leftmost* visible column can be mostly
  * covered, and a pill centred on it then sits half under an opaque column
- * reading "g 1". It slides right instead: the day it names is on screen, so its
- * label has to be too.
+ * reading "g 1". A floor, not a snap: a column that already clears the edge is
+ * left alone.
  */
 export function hoverPillCenter({ offset, dayW, scrollLeft, pillW }: {
   offset: number;
