@@ -103,6 +103,23 @@ export function computeRange(tasks: Task[]): TimelineRange {
 }
 
 /**
+ * Days to scroll by to keep the same calendar date under a fixed viewport when
+ * the grid's origin moves from `prev` to `next`.
+ *
+ * `rangeStart` is derived from the task dates, so editing the YAML can move it.
+ * Every offset in the chart is recomputed against the new origin, but the
+ * browser's `scrollLeft` is a raw pixel value that survives the update — so a
+ * roadmap that grows a new earliest task slides the whole grid right underneath
+ * a viewport that stays put, silently showing an earlier date than before.
+ *
+ * Positive when `next` is earlier than `prev` (content moved right, so the
+ * viewport has to follow it right); negative when the origin moved later.
+ */
+export function scrollShiftDays(prev: Date, next: Date): number {
+  return daysBetween(next, prev);
+}
+
+/**
  * Day offset of `now`'s calendar day from `rangeStart`. Uncapped on purpose: a
  * roadmap entirely in the past or the future reports how far off today is, which
  * is what hides the marker and lets the browser clamp the initial scroll.

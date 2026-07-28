@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { addDays, computeRange, parseDay, todayOffset } from '../src/timeline';
+import { addDays, computeRange, parseDay, scrollShiftDays, todayOffset } from '../src/timeline';
 import type { Task } from '../src/parseYaml';
 
 // Every expectation here is hand-derived in this one zone. It is deliberately
@@ -132,6 +132,47 @@ describe('computeRange', () => {
       ['December 2026', 0],
       ['January 2027', 16],
     ]);
+  });
+});
+
+describe('scrollShiftDays', () => {
+  // An SSE reload is a prop update, not a remount, so scrollLeft survives it
+  // while every offset is recomputed against the new rangeStart. Without this
+  // correction the viewport keeps its pixel and loses its date: a roadmap that
+  // grows an earlier task slid the left edge 10 days into the past.
+  test('keeps the same date at the left edge when the roadmap grows earlier', () => {
+    const existing = task({ start: '2026-07-01', end: '2026-07-31' });
+    const base = computeRange([existing]);
+    const grown = computeRange([
+      existing,
+      task({ name: 'Earlier task', start: '2026-06-21', end: '2026-06-25' }),
+    ]);
+
+    // rangeStart moves from Sat Jun 27 to Wed Jun 17, ten days earlier.
+    const scrolledDays = 20; // wherever the user had scrolled to
+    const shift = scrollShiftDays(base.rangeStart, grown.rangeStart);
+
+    expect(shift).toBe(10);
+    expect(addDays(grown.rangeStart, scrolledDays + shift).getTime())
+      .toBe(addDays(base.rangeStart, scrolledDays).getTime());
+  });
+
+  // The other direction — deleting the earliest task — has to scroll back, so
+  // the sign is load-bearing rather than a magnitude with an arbitrary
+  // convention. A flipped sign moves the viewport twice as far the wrong way.
+  test('runs negative when the origin moves later, and zero when it holds', () => {
+    const early = new Date(2026, 5, 17);
+    const late = new Date(2026, 5, 27);
+
+    expect(scrollShiftDays(early, late)).toBe(-10);
+    expect(scrollShiftDays(late, new Date(2026, 5, 27))).toBe(0);
+  });
+
+  // The shift is multiplied by a fixed day width, so it has to be a count of
+  // calendar days. Mar 8 2026 is 23 hours long in New York: elapsed-millisecond
+  // arithmetic reports 13.96 days here and drags the viewport off the grid.
+  test('counts calendar days across a DST transition', () => {
+    expect(scrollShiftDays(new Date(2026, 2, 15), new Date(2026, 2, 1))).toBe(14);
   });
 });
 

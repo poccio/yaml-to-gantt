@@ -2,7 +2,7 @@ import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } f
 import type { JSX } from 'preact';
 import type { Task } from './parseYaml';
 import type { Theme } from './themes';
-import { addDays, computeRange, daysBetween, parseDay, todayOffset } from './timeline';
+import { addDays, computeRange, daysBetween, parseDay, scrollShiftDays, todayOffset } from './timeline';
 
 const DAY_W = 40;
 const LABEL_W = 280;
@@ -164,6 +164,26 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     container.scrollLeft = (todayRawOffset - TODAY_LEAD_IN) * DAY_W;
     hasFocusedToday.current = true;
   }, [containerWidth, todayRawOffset]);
+
+  // Holding the scroll position across an SSE reload means holding the *date*
+  // at the left edge, not the pixel. rangeStart is derived from the task dates,
+  // so a reload that introduces an earlier task moves the origin and shifts
+  // every offset right, while scrollLeft — a DOM value, untouched by the render
+  // — keeps pointing at what is now an earlier day. Re-anchor by the same delta.
+  //
+  // Guarded on the latch: before today-focus has run there is no position worth
+  // preserving, and shifting first would only fight the effect above.
+  const prevRangeStart = useRef(rangeStart);
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const shift = scrollShiftDays(prevRangeStart.current, rangeStart);
+    prevRangeStart.current = rangeStart;
+    // DAY_W for the same reason as above: where effectiveDayW differs, the
+    // timeline fits the container and there is nothing to scroll.
+    if (container && hasFocusedToday.current && shift !== 0) {
+      container.scrollLeft += shift * DAY_W;
+    }
+  }, [rangeStart]);
 
   const weekGrid = {
     backgroundImage: `
