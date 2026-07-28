@@ -7,12 +7,15 @@
     "module": "NodeNext",
     "moduleResolution": "nodenext",
     "types": ["node"],
-    "outDir": ".build-server",
+    // Emitted outside the source tree on purpose. When the JS sat next to the
+    // .ts, `tests/server.test.ts`'s `../server/index.js` resolved to the stale
+    // emitted copy instead of the source, so a local run tested the last build.
+    "outDir": "dist-server",
     "rootDir": ".",
 
     // tsconfig.test.json consumes these declarations instead of re-checking
-    // this source under bundler rules. They live outside outDir because
-    // `build:server` deletes `.build-server` after copying the JS out.
+    // this source under bundler rules. They live outside outDir so that what
+    // ships is only the runnable JS.
     "composite": true,
     "declaration": true,
     "declarationDir": ".tsbuild/node",

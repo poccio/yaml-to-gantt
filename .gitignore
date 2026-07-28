@@ -1,10 +1,10 @@
 node_modules/
 dist/
 
-# build output: the source is .ts, the shipped JS is emitted next to it
-server/*.js
-bin/*.js
-.build-server/
+# build output: the source is .ts under server/ and bin/, the shipped JS is
+# emitted here. Keeping it out of the source tree is load-bearing — see
+# tsconfig.server.json.
+dist-server/
 
 # tsc --build caches, plus the declarations tsconfig.test.json consumes
 .tsbuild/

@@ -6,8 +6,24 @@ import sirv from 'sirv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** The built client, one level up from the compiled server in the tarball. */
-const DIST_DIR = path.join(__dirname, '..', 'dist');
+/**
+ * The built client, located by walking up to the package root instead of
+ * counting `..` hops. This module runs from `server/` under vitest and from
+ * `dist-server/server/` in the tarball, so any fixed depth is correct in exactly
+ * one of the two and silently serves nothing in the other.
+ */
+function findDistDir(from: string): string {
+  let dir = from;
+  while (!fs.existsSync(path.join(dir, 'package.json'))) {
+    const parent = path.dirname(dir);
+    if (parent === dir) throw new Error(`no package.json above ${from}; cannot locate dist/`);
+    dir = parent;
+  }
+  return path.join(dir, 'dist');
+}
+
+/** Exported so a test can pin it — no other test exercises the default. */
+export const DIST_DIR = findDistDir(__dirname);
 
 interface StartOptions {
   port?: number;
@@ -31,9 +47,14 @@ export function start(
     single: true,
     etag: true,
     setHeaders(res, pathname) {
+      // Only a content-hashed name may be pinned, and the extension is part of
+      // the test rather than the `/assets/` prefix alone: `single` answers an
+      // extensionless miss with index.html, so a bare prefix would pin *HTML*
+      // under that URL for a year.
+      const isHashed = /^\/assets\/.+\.[a-z0-9]+$/i.test(pathname);
       res.setHeader(
         'Cache-Control',
-        pathname.startsWith('/assets/')
+        isHashed
           ? 'public, max-age=31536000, immutable'
           : 'no-cache',
       );

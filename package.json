@@ -10,17 +10,16 @@
     "url": "https://github.com/poccio/yaml-to-gantt"
   },
   "bin": {
-    "yaml-to-gantt": "./bin/cli.js"
+    "yaml-to-gantt": "./dist-server/bin/cli.js"
   },
   "files": [
-    "bin",
-    "server",
+    "dist-server",
     "dist"
   ],
   "scripts": {
     "dev": "vite",
     "build": "pnpm typecheck && vite build && pnpm build:server",
-    "build:server": "tsc --build tsconfig.server.json --force && cp .build-server/server/*.js server/ && cp .build-server/bin/*.js bin/ && rm -rf .build-server",
+    "build:server": "tsc --build tsconfig.server.json --force",
     "typecheck": "tsc --build",
     "test": "vitest run",
     "prepublishOnly": "pnpm build"

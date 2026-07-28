@@ -3,7 +3,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { start } from '../server/index.js';
+import { fileURLToPath } from 'node:url';
+import { DIST_DIR, start } from '../server/index.js';
 
 interface FetchResult {
   status: number;
@@ -62,6 +63,15 @@ describe('server', () => {
     return `http://localhost:${port}`;
   }
 
+  // Every other test injects `distDir`, so this is the only cover on the default.
+  // It is release-critical and fails silently — a wrong root serves 404s, and the
+  // emitted server sits one directory deeper than this source, so counting `..`
+  // hops would be right here and wrong in the tarball.
+  it('defaults its static root to the package dist/', () => {
+    const packageRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+    expect(DIST_DIR).toBe(path.join(packageRoot, 'dist'));
+  });
+
   it('serves YAML file at /api/yaml', async () => {
     const yamlContent = 'projects:\n  Test:\n    - name: T1\n      start: 2025-01-01\n      end: 2025-01-05\n      assignees: []\n';
     const origin = await serve(yamlContent);
@@ -87,6 +97,18 @@ describe('server', () => {
     const hashed = await fetchUrl(`${origin}/${HASHED_ASSET}`);
     expect(hashed.status).toBe(200);
     expect(hashed.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+  });
+
+  it('does not pin the SPA fallback served under /assets/', async () => {
+    const origin = await serve('projects: {}');
+
+    // `single` answers an extensionless miss with index.html, so keying the
+    // immutable header off the `/assets/` prefix alone would pin HTML — at that
+    // URL, for a year. Only a hashed *filename* earns it.
+    const fallback = await fetchUrl(`${origin}/assets/not-a-real-file`);
+    expect(fallback.status).toBe(200);
+    expect(fallback.headers['content-type']).toContain('text/html');
+    expect(fallback.headers['cache-control']).toBe('no-cache');
   });
 
   it('answers a revalidation of index.html with 304', async () => {
