@@ -59,6 +59,75 @@ export function hoverOffsetAt({
   return offset >= 0 && offset < totalDays ? offset : null;
 }
 
+/**
+ * Is the day column starting at `offset` covered by the sticky label column?
+ *
+ * The label column stays parked over the first `LABEL_W` of the viewport while
+ * the timeline scrolls beneath it, so in timeline-local coordinates it covers
+ * everything left of `scrollLeft`. Callers use this to *not draw* what the label
+ * column would otherwise have to hide: hiding by paint order only works for
+ * opaque paint, and a glow spills past the edge of whatever covers it.
+ *
+ * A column straddling the edge counts as behind — the markers this guards are
+ * drawn at the column's left edge, which is the pixel being asked about.
+ */
+export function isBehindLabelColumn({ offset, dayW, scrollLeft }: {
+  offset: number;
+  dayW: number;
+  scrollLeft: number;
+}): boolean {
+  return offset * dayW < scrollLeft;
+}
+
+/**
+ * `clip-path` for the today bar, letting its glow reach left only as far as the
+ * label column's edge.
+ *
+ * The bar is never drawn behind the labels, but it is drawn *flush against* them
+ * — and a 14px blur around a 2px line reaches well past the edge, onto labels
+ * that sit inside faded rows and cannot outrank it. Nothing is lost by cutting
+ * it: everything left of that edge is under an opaque column anyway. The other
+ * three sides stay open so the glow is unchanged everywhere else.
+ */
+export function todayBarClip({ x, scrollLeft, blur }: {
+  x: number;
+  scrollLeft: number;
+  blur: number;
+}): string {
+  const leftReach = Math.min(blur, Math.max(0, x - scrollLeft));
+  return `inset(${-blur}px ${-blur}px ${-blur}px ${-leftReach}px)`;
+}
+
+// The hover pill is 13px monospace with 9px of side padding. Approximated for
+// the same reason `chipX` approximates chips: the position is decided during
+// render, before there is a DOM node to measure.
+const PILL_CHAR_W = 7.2;
+const PILL_PADDING_X = 9;
+
+/** Roughly how wide the pill reading `label` will come out. */
+export function hoverPillW(label: string): number {
+  return label.length * PILL_CHAR_W + PILL_PADDING_X * 2;
+}
+
+/**
+ * Where to centre the hover pill, which is the middle of the hovered day column
+ * unless that puts the pill under the label column.
+ *
+ * The cursor cannot reach the label column, so the hovered day is always at
+ * least partly visible — but the *leftmost* visible column can be mostly
+ * covered, and a pill centred on it then sits half under an opaque column
+ * reading "g 1". It slides right instead: the day it names is on screen, so its
+ * label has to be too.
+ */
+export function hoverPillCenter({ offset, dayW, scrollLeft, pillW }: {
+  offset: number;
+  dayW: number;
+  scrollLeft: number;
+  pillW: number;
+}): number {
+  return Math.max(offset * dayW + dayW / 2, scrollLeft + pillW / 2);
+}
+
 export interface BarGeometry {
   barLeft: number;
   barW: number;

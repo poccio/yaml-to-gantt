@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, rowMinW, taskBarGeometry, timelineMinW } from '../src/chartLayout';
+import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayBarClip } from '../src/chartLayout';
 import type { Task } from '../src/parseYaml';
 
 describe('effectiveDayW', () => {
@@ -82,6 +82,97 @@ describe('hoverOffsetAt', () => {
     expect(hoverOffsetAt({
       clientX: 500, containerLeft: 100, scrollLeft: 0, dayW: 40, totalDays: 2,
     })).toBeNull();
+  });
+});
+
+describe('isBehindLabelColumn', () => {
+  // What the today marker is guarded on: behind the label column it is hidden
+  // only by that column painting over it, and its glow spills past that edge, so
+  // it has to stop being drawn rather than be covered.
+  test('reports a day scrolled past the label column edge as behind it', () => {
+    expect(isBehindLabelColumn({ offset: 10, dayW: 40, scrollLeft: 401 })).toBe(true);
+  });
+
+  // Off by one the other way and the marker vanishes a day early, while today is
+  // still the leftmost visible column.
+  test('reports a day flush against the label column edge as visible', () => {
+    expect(isBehindLabelColumn({ offset: 10, dayW: 40, scrollLeft: 400 })).toBe(false);
+  });
+
+  test('reports the origin as visible before any scrolling', () => {
+    expect(isBehindLabelColumn({ offset: 0, dayW: 40, scrollLeft: 0 })).toBe(false);
+  });
+
+  // A stretched grid puts the same day at a different pixel, so the predicate has
+  // to be given the width the marker was positioned with, not BASE_DAY_W.
+  test('follows the day width it is given', () => {
+    expect(isBehindLabelColumn({ offset: 10, dayW: 56, scrollLeft: 500 })).toBe(false);
+    expect(isBehindLabelColumn({ offset: 10, dayW: 40, scrollLeft: 500 })).toBe(true);
+  });
+});
+
+describe('todayBarClip', () => {
+  // Away from the labels the glow is untouched — the clip only exists to stop it
+  // reaching the label column, and it must not quietly reshape the marker.
+  test('leaves the glow whole when the bar is clear of the label column', () => {
+    expect(todayBarClip({ x: 400, scrollLeft: 0, blur: 14 }))
+      .toBe('inset(-14px -14px -14px -14px)');
+  });
+
+  // Flush against the labels: everything left of the bar is under an opaque
+  // column, so the glow is cut at the bar's own edge.
+  test('cuts the glow at the bar when it sits on the label column edge', () => {
+    expect(todayBarClip({ x: 400, scrollLeft: 400, blur: 14 }))
+      .toBe('inset(-14px -14px -14px 0px)');
+  });
+
+  // Between the two: the glow reaches exactly as far as the edge, no further, so
+  // there is no visible step as the bar scrolls in and out of the window.
+  test('lets the glow reach the label column edge and stop', () => {
+    expect(todayBarClip({ x: 405, scrollLeft: 400, blur: 14 }))
+      .toBe('inset(-14px -14px -14px -5px)');
+  });
+
+  // The bar is not drawn behind the labels at all, but a clip that read
+  // `inset(... 5px)` would eat into the bar itself rather than its glow.
+  test('never clips into the bar itself', () => {
+    expect(todayBarClip({ x: 395, scrollLeft: 400, blur: 14 }))
+      .toBe('inset(-14px -14px -14px 0px)');
+  });
+});
+
+describe('hoverPillCenter', () => {
+  // The pill labels the day the cursor is on, so it belongs over the middle of
+  // that column whenever it fits there.
+  test('centres the pill on its day column when there is room', () => {
+    // Day 10 spans 400–440, so its middle is 420, well clear of the labels.
+    expect(hoverPillCenter({ offset: 10, dayW: 40, scrollLeft: 0, pillW: 54 })).toBe(420);
+  });
+
+  // The leftmost visible column can be mostly covered by the label column, and a
+  // pill centred on it reads "g 1" with the rest under an opaque column.
+  test('slides the pill clear of the label column edge', () => {
+    // Column middle 420 would put the pill's left edge at 393, under a label
+    // column ending at 410; 437 is the leftmost centre that clears it.
+    expect(hoverPillCenter({ offset: 10, dayW: 40, scrollLeft: 410, pillW: 54 })).toBe(437);
+  });
+
+  // The clamp is a floor, not a snap: a column that already clears the edge must
+  // not be pulled right.
+  test('leaves a column that already clears the edge alone', () => {
+    expect(hoverPillCenter({ offset: 10, dayW: 40, scrollLeft: 393, pillW: 54 })).toBe(420);
+  });
+
+  // A wider label needs more room, so the floor has to follow the text.
+  test('gives a wider pill a wider berth', () => {
+    const short = hoverPillCenter({ offset: 10, dayW: 40, scrollLeft: 410, pillW: hoverPillW('Aug 1') });
+    const long = hoverPillCenter({ offset: 10, dayW: 40, scrollLeft: 410, pillW: hoverPillW('Sep 12') });
+    expect(long).toBeGreaterThan(short);
+  });
+
+  test('sizes the pill from its label', () => {
+    // 5 chars * 7.2 + 9px of padding a side.
+    expect(hoverPillW('Aug 1')).toBeCloseTo(54);
   });
 });
 

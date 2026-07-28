@@ -5,13 +5,16 @@ import type { Theme } from './themes';
 import { addDays, computeRange, scrollShiftDays, todayOffset } from './timeline';
 import { CARET_HALF_EDGE, POPOVER_W, placePopover } from './popover';
 import type { PopoverPos } from './popover';
-import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, rowMinW, taskBarGeometry, timelineMinW } from './chartLayout';
+import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayBarClip } from './chartLayout';
 
 const ROW_H = 52;
 const PROJ_H = 54;
 const HDR_H = 68;
 // Days of past context left of "today" when the chart opens.
 const TODAY_LEAD_IN = 7;
+// Blur radius of the today marker's glow, which is also how far past the bar it
+// reaches — `todayBarClip` needs the same number the shadow is drawn with.
+const TODAY_GLOW_BLUR = 14;
 
 const PROJECT_COLORS = [
   '#60a5fa', '#34d399', '#f472b6', '#fb923c',
@@ -169,6 +172,32 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     }
   }, [rangeStart]);
 
+  // Two things have to know where the sticky label column currently sits over the
+  // timeline — the today marker and the hover pill — and in timeline coordinates
+  // that edge *is* scrollLeft. Mirrored into state on every scroll, the same way
+  // hoverOffset mirrors the cursor on every mousemove.
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const syncScrollLeft = () => {
+    const container = containerRef.current;
+    if (container) setScrollLeft(container.scrollLeft);
+  };
+  // Declared after both effects above so it reads the position they just set, not
+  // the one they replaced. A programmatic scrollLeft does fire a scroll event, but
+  // only on the next frame, which would leave a frame of stale geometry.
+  useLayoutEffect(syncScrollLeft, [containerWidth, rangeStart]);
+
+  // Where the marker goes, or null when there is none to draw: today is outside
+  // the range, or parked behind the label column.
+  //
+  // Nothing clips the marker to the *visible* timeline, so behind the label
+  // column it is hidden only by opaque paint on top — and its glow spills 14px
+  // past whatever that is, through the hairline seam under the header, as a stray
+  // blue dot. Not drawing it is the fix; covering it is not.
+  const todayX = todayVisibleOffset !== null &&
+    !isBehindLabelColumn({ offset: todayVisibleOffset, dayW, scrollLeft })
+    ? todayVisibleOffset * dayW
+    : null;
+
   const weekGrid = {
     backgroundImage: `
       repeating-linear-gradient(
@@ -192,16 +221,26 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     `,
   };
 
-  const handleMouseMove = (e: JSX.TargetedMouseEvent<HTMLDivElement>) => {
+  // The cursor's own x, kept so a scroll can re-derive the day under it. The
+  // crosshair names the day the pointer is on, and scrolling puts a different
+  // day there without the pointer moving — holding the derived offset instead
+  // left the pill reading "Aug 10" halfway through September.
+  const hoverClientX = useRef<number | null>(null);
+  const syncHover = () => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || hoverClientX.current === null) return;
     setHoverOffset(hoverOffsetAt({
-      clientX: e.clientX,
+      clientX: hoverClientX.current,
       containerLeft: container.getBoundingClientRect().left,
       scrollLeft: container.scrollLeft,
       dayW,
       totalDays,
     }));
+  };
+
+  const handleMouseMove = (e: JSX.TargetedMouseEvent<HTMLDivElement>) => {
+    hoverClientX.current = e.clientX;
+    syncHover();
   };
 
   const hoverDate = hoverOffset !== null
@@ -226,12 +265,12 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     </>
   );
 
-  const TodayLine = ({ height }: { height: number }) => todayVisibleOffset === null ? null : (
-    <div style={{
-      position: 'absolute', left: todayVisibleOffset * dayW, top: 0,
+  const TodayLine = ({ height }: { height: number }) => todayX === null ? null : (
+    <div data-today="header" style={{
+      position: 'absolute', left: todayX, top: 0,
       width: 2, height,
       background: `linear-gradient(180deg, ${ACCENT}, rgba(79,142,247,0.6))`,
-      boxShadow: `0 0 14px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,
+      boxShadow: `0 0 ${TODAY_GLOW_BLUR}px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,
       zIndex: 4, pointerEvents: 'none',
     }} />
   );
@@ -259,13 +298,28 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     ...extra,
   });
 
+  // Hover dimming goes on the row, never on its cells. A sticky label cell at
+  // `opacity: 0.4` is translucent over the timeline cell it exists to occlude,
+  // so the week bands and any bar scrolling underneath show straight through it.
+  // Faded as a row, the label still paints opaquely over the timeline and only
+  // the composite is blended with the surface behind.
+  //
+  // The cost is that a faded row is a stacking context, which scopes the label
+  // cell's zIndex inside the row: anything overlaying the rows from outside
+  // outranks the labels, whatever their zIndex says. Nothing may be painted over
+  // the label column from out there — see `todayBarClip`.
+  const dimmed = (faded: boolean): JSX.CSSProperties => ({
+    opacity: faded ? 0.4 : 1,
+    transition: 'opacity 0.15s ease',
+  });
+
   return (
     <div
       ref={containerRef}
       style={{ flex: 1, overflow: 'auto', background: theme.surface }}
       onMouseMove={handleMouseMove}
-      onMouseLeave={() => { setHoverOffset(null); setHoveredRow(null); }}
-      onScroll={() => setOpenTask(null)}
+      onMouseLeave={() => { hoverClientX.current = null; setHoverOffset(null); setHoveredRow(null); }}
+      onScroll={() => { setOpenTask(null); syncScrollLeft(); syncHover(); }}
     >
 
       <div style={rowShell(HDR_H, {
@@ -327,9 +381,11 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             )}
 
             {hoverDate && (
-              <div style={{
+              <div data-hover-pill style={{
                 position: 'absolute',
-                left: hoverOffset! * dayW + dayW / 2,
+                left: hoverPillCenter({
+                  offset: hoverOffset!, dayW, scrollLeft, pillW: hoverPillW(hoverDate),
+                }),
                 top: '50%', transform: 'translate(-50%, -50%)',
                 background: ACCENT, color: '#ffffff',
                 fontSize: 13, lineHeight: 1,
@@ -344,10 +400,10 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             )}
 
             <TodayLine height={38} />
-            {todayVisibleOffset !== null && (
-              <div style={{
+            {todayX !== null && (
+              <div data-today="header" style={{
                 position: 'absolute',
-                left: todayVisibleOffset * dayW - 5, top: 13,
+                left: todayX - 5, top: 13,
                 width: 10, height: 10, borderRadius: '50%',
                 background: ACCENT,
                 boxShadow: `0 0 12px rgba(79,142,247,0.9), 0 0 4px rgba(79,142,247,1)`,
@@ -359,8 +415,9 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
       </div>
 
       {/* One full-height overlay at the end, not a segment per row: hover dimming
-          sets opacity on the row div, which caps any child's and would fade the
-          line along with the row. */}
+          fades the timeline cell, and a segment living inside one would fade with
+          it. Staying outside the rows is also why it has to stay outside their
+          stacking contexts — see `dimmed`. */}
       <div style={{ position: 'relative' }}>
       {projects.map(proj => {
         const rgb = hexRgb(proj.color);
@@ -370,10 +427,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
         return (
           <div key={proj.name}>
 
-            <div style={rowShell(PROJ_H, {
-              opacity: hoveredRow !== null ? 0.4 : 1,
-              transition: 'opacity 0.15s ease',
-            })}>
+            <div style={rowShell(PROJ_H, dimmed(hoveredRow !== null))}>
               <div style={{
                 ...labelCell({
                   backgroundColor: theme.surface,
@@ -420,10 +474,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                 <div
                   key={task.name}
                   onMouseEnter={() => setHoveredRow(rowId)}
-                  style={rowShell(ROW_H, {
-                    opacity: hoveredRow !== null && !isRowHovered ? 0.4 : 1,
-                    transition: 'opacity 0.15s ease',
-                  })}
+                  style={rowShell(ROW_H, dimmed(hoveredRow !== null && !isRowHovered))}
                 >
                   <div style={{
                     ...labelCell({
@@ -552,13 +603,17 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
         );
       })}
 
-        {todayVisibleOffset !== null && (
-          <div style={{
+        {todayX !== null && (
+          <div data-today="bar" style={{
             position: 'absolute',
-            left: LABEL_W + todayVisibleOffset * dayW, top: 0, bottom: 0,
+            left: LABEL_W + todayX, top: 0, bottom: 0,
             width: 2,
             background: `linear-gradient(180deg, ${ACCENT}, rgba(79,142,247,0.6))`,
-            boxShadow: `0 0 14px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,
+            boxShadow: `0 0 ${TODAY_GLOW_BLUR}px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,
+            // The rows below are faded as groups, so their labels cannot outrank
+            // this bar however high their zIndex — the glow has to stop at the
+            // label column rather than be painted over.
+            clipPath: todayBarClip({ x: todayX, scrollLeft, blur: TODAY_GLOW_BLUR }),
             zIndex: 4, pointerEvents: 'none',
           }} />
         )}

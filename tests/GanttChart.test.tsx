@@ -109,6 +109,43 @@ function draw(tasks: Task[]) {
   });
 }
 
+/** Header line, header dot and the full-height bar all carry `data-today`. */
+function todayMarkerCount(): number {
+  return scroller().querySelectorAll('[data-today]').length;
+}
+
+function todayBar(): HTMLElement {
+  return scroller().querySelector('[data-today="bar"]') as HTMLElement;
+}
+
+function scrollTo(x: number) {
+  act(() => {
+    scroller().scrollLeft = x;
+    scroller().dispatchEvent(new Event('scroll'));
+  });
+}
+
+/** jsdom reports the container at x 0, so clientX is LABEL_W + timeline x. */
+function hoverAt(clientX: number) {
+  act(() => {
+    scroller().dispatchEvent(new MouseEvent('mousemove', { clientX, bubbles: true }));
+  });
+}
+
+function hoverPill(): HTMLElement {
+  return scroller().querySelector('[data-hover-pill]') as HTMLElement;
+}
+
+/** The rows of the single project the fixtures produce: header row first. */
+function rows(): HTMLElement[] {
+  const group = scroller().children[1].firstElementChild as HTMLElement;
+  return [...group.children] as HTMLElement[];
+}
+
+function cellOpacities(row: HTMLElement): string[] {
+  return [...row.children].map(cell => (cell as HTMLElement).style.opacity);
+}
+
 describe('initial scroll latch', () => {
   // Opening on rangeStart buries today off-screen for any roadmap with history.
   test('focuses today on a mount that already has layout', () => {
@@ -151,6 +188,170 @@ describe('initial scroll latch', () => {
       draw([task()]);
 
       expect(scroller().scrollLeft).toBe(3000);
+    } finally {
+      stubs.restore();
+    }
+  });
+});
+
+// A roadmap that brackets the pinned today, which the fixture above does not:
+//   rangeStart = Jul 1 − RANGE_PAD(4) = Sat Jun 27 2026, totalDays = 72
+//   today is Jul 28 2026, so the marker sits at 31 * BASE_DAY_W(40)
+const TODAY_X = 1240;
+
+function spanningToday(): Task {
+  return task({ start: '2026-07-01', end: '2026-08-31' });
+}
+
+describe('today marker', () => {
+  // Nothing clips the marker to the visible timeline: behind the label column it
+  // is hidden only by that column painting over it, and its 14px glow spills past
+  // that edge — a stray blue dot at the seam under the header. So it has to stop
+  // being drawn once today scrolls behind the labels.
+  test('draws the line, the header dot and the full-height bar while today is in view', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([spanningToday()]);
+      expect(todayMarkerCount()).toBe(3);
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  test('stops drawing the marker once today scrolls behind the label column', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([spanningToday()]);
+
+      scrollTo(TODAY_X + 1);
+
+      expect(todayMarkerCount()).toBe(0);
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  // Symmetry, and the boundary itself: at exactly TODAY_X today is the leftmost
+  // visible column, so hiding it there would drop the marker a day early.
+  test('draws it again the moment today clears the label column', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([spanningToday()]);
+      scrollTo(TODAY_X + 1);
+
+      scrollTo(TODAY_X);
+
+      expect(todayMarkerCount()).toBe(3);
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  // The rows are faded as groups, so their labels cannot outrank the bar however
+  // high their zIndex: a glow reaching past the label column edge lands on them.
+  test('lets the glow reach the label column edge and no further', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([spanningToday()]);
+
+      scrollTo(TODAY_X);
+      expect(todayBar().style.clipPath).toBe('inset(-14px -14px -14px 0px)');
+
+      scrollTo(TODAY_X - 10);
+      expect(todayBar().style.clipPath).toBe('inset(-14px -14px -14px -10px)');
+
+      scrollTo(0);
+      expect(todayBar().style.clipPath).toBe('inset(-14px -14px -14px -14px)');
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  // The uncapped offset the initial scroll relies on must not reach the marker.
+  test('draws nothing for a roadmap that ends before today', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([task()]);
+      expect(todayMarkerCount()).toBe(0);
+    } finally {
+      stubs.restore();
+    }
+  });
+});
+
+// Day 10 of the fixture grid is Jul 7 2026, so the pill reads "Jul 7": five
+// characters, hoverPillW 54, half-width 27. The column spans 400–440.
+describe('hover pill', () => {
+  test('centres the pill on the hovered column', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([spanningToday()]);
+      scrollTo(0);
+
+      hoverAt(280 + 410);
+
+      expect(hoverPill().style.left).toBe('420px');
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  // The cursor cannot reach the label column, so the hovered day is always at
+  // least partly visible — but centred on a column that is mostly covered, the
+  // pill sits half under an opaque column reading "l 7".
+  test('slides the pill clear of the label column edge', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([spanningToday()]);
+      scrollTo(410);
+
+      hoverAt(280);
+
+      // 410 + 54/2: the leftmost centre that keeps the whole pill on screen.
+      expect(hoverPill().style.left).toBe('437px');
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  // Clamping a pill whose day has scrolled away parks a wrong date at the label
+  // edge — it read "Aug 10" in September. The crosshair names the day under the
+  // pointer, so a scroll under a still cursor has to re-derive which day that is.
+  test('renames the pill when a scroll moves a new day under the cursor', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([spanningToday()]);
+      scrollTo(0);
+      hoverAt(280 + 410);
+      expect(hoverPill().textContent).toBe('Jul 7');
+
+      scrollTo(400);
+
+      // Same cursor, ten days further along the grid.
+      expect(hoverPill().textContent).toBe('Jul 17');
+    } finally {
+      stubs.restore();
+    }
+  });
+});
+
+describe('hover dimming', () => {
+  // Dimming must land on the row, never on its cells. A sticky label cell at
+  // opacity 0.4 is translucent over the timeline cell it exists to occlude, so
+  // the week bands and any bar scrolling underneath show through it. Faded as a
+  // row, the label still paints opaquely over the timeline.
+  test('fades whole rows and leaves the cells opaque', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([task(), task({ name: 'Second' })]);
+      const [projectRow, hovered, peer] = rows();
+
+      act(() => { hovered.dispatchEvent(new Event('mouseenter')); });
+
+      expect([projectRow, hovered, peer].map(r => r.style.opacity)).toEqual(['0.4', '1', '0.4']);
+      expect(cellOpacities(projectRow)).toEqual(['', '']);
+      expect(cellOpacities(hovered)).toEqual(['', '']);
+      expect(cellOpacities(peer)).toEqual(['', '']);
     } finally {
       stubs.restore();
     }
