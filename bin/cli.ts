@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import { start } from '../server/index.js';
@@ -28,6 +28,11 @@ const absPath = resolve(filePath);
 
 if (!existsSync(absPath)) {
   console.error(`Error: file not found: ${absPath}`);
+  process.exit(1);
+}
+
+if (!statSync(absPath).isFile()) {
+  console.error(`Error: not a file: ${absPath}`);
   process.exit(1);
 }
 
