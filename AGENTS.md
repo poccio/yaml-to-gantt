@@ -1,6 +1,8 @@
 # yaml-to-gantt
 
-A Vite + Preact app that renders an interactive Gantt chart from a YAML roadmap file. Preact is aliased as React via `vite.config.js`.
+A Vite + Preact app that renders an interactive Gantt chart from a YAML roadmap.
+The CLI serves one file, watches it, and hot-reloads the browser over SSE. Preact
+is aliased as React in `vite.config.js`.
 
 ## Input format
 
@@ -8,125 +10,147 @@ A Vite + Preact app that renders an interactive Gantt chart from a YAML roadmap 
 projects:
   Product Launch:
     - name: Market research
-      start: 2025-07-01   # YYYY-MM-DD
-      end: 2025-07-11
-      description: "Interview <b>10 target customers</b> and summarize findings"   # optional; rendered as raw HTML
-      assignees:
-        - Alice
+      start: 2025-07-01                              # YYYY-MM-DD
+      end: 2025-07-11                                # inclusive
+      description: "Interview <b>10 customers</b>"   # optional, raw HTML
+      assignees: [Alice]                             # optional; [] is valid
     - name: Landing page
       start: 2025-07-07
       end: 2025-07-24
-      originallyPlannedStart: 2025-07-07   # optional baseline (delay viz)
+      originallyPlannedStart: 2025-07-07             # optional baseline for delay visualization (both or neither)
       originallyPlannedEnd: 2025-07-18
-      assignees:
-        - Bob
-        - Carol
-    - name: Beta release
-      start: 2025-07-21
-      end: 2025-07-25
-      assignees: []       # empty list is valid; description may be omitted
+      assignees: [Bob, Carol]
 ```
 
-`description` is optional. It surfaces in a hover popover (the trailing "?" marker
-on each task row) and is rendered as raw HTML, so inline tags like `<b>` or `<a>`
-work — input is trusted (you author your own YAML).
-
-`originallyPlannedStart` / `originallyPlannedEnd` are optional and must be
-provided together — they render the task's original baseline alongside the
-actual `start`/`end`, making slippage and delays visible at a glance. If only
-one is set, the baseline is ignored (see `hasBaseline` in `src/parseYaml.ts`).
-
-Parsed by `src/parseYaml.ts` using `js-yaml`. Date values are coerced to ISO strings (js-yaml parses `YYYY-MM-DD` as JS `Date` objects by default).
+`src/parseYaml.ts` flattens this into `Task[]` and **validates every date**
+(`YYYY-MM-DD`, and a day that really exists). Keep that validation: one Invalid
+Date poisons the min/max in `computeRange` and silently blanks the *whole* chart,
+not just the bad row. `description` is raw HTML — input is trusted.
 
 ## Architecture
 
 ```
 bin/
-  cli.ts          CLI entry point — starts server, passes absolute path in ?file=, opens browser
-                  (bin/*.js and server/*.js are build output — gitignored, shipped in the tarball)
+  cli.ts            Entry — validates the path, starts the server, opens the browser
+  cliArgs.ts        Pure argv → CliCommand, plus USAGE
 server/
-  index.ts        HTTP server — static files, YAML endpoint, SSE
+  index.ts          Static dist/, /api/yaml, /api/events (SSE), fs.watch
 src/
-  main.tsx        Preact entry point
-  App.tsx         Card layout, file loading, assignee filter pills, New button, theme toggle
-                  Also contains EmptyState and Pill components
-  GanttChart.tsx  Custom Gantt renderer — pure Preact + CSS
-  timeline.ts     Pure day-grid math — parseDay, daysBetween, computeRange, todayOffset
-  parseYaml.ts    YAML → flat task array, exports Task interface
-  urlOptions.ts   Query-string → CLI options (file path, hideAssigneeFilter)
-  themes.ts       DARK and LIGHT theme token objects, exports Theme interface
-tests/
-  parseYaml.test.ts   server.test.ts   timeline.test.ts   urlOptions.test.ts
-roadmap.yaml      Example .yaml file
-vite.config.js    Preact alias, vitest config
-tsconfig.json
+  main.tsx          Preact entry point
+  App.tsx           Card layout, file loading, filter pills, theme toggle; also
+                    EmptyState and Pill
+  GanttChart.tsx    Chart renderer, Preact + CSS; also TaskInfoPopover
+  timeline.ts       Calendar-day math — parseDay, addDays, daysBetween, computeRange, …
+  chartLayout.ts    Pixel math — BASE_DAY_W, LABEL_W, effectiveDayW, bar/chip/hover
+                    geometry
+  popover.ts        placePopover
+  parseYaml.ts      YAML → validated Task[]
+  urlOptions.ts     Query string → CLI options
+  themes.ts         DARK / LIGHT tokens
+tests/              One file per module; GanttChart.test.tsx is the only jsdom file
+.github/workflows/
+  publish.yml       Release → typecheck, test, stamp version, publish to npm
+  validate.yml      pull_request → typecheck, test
+assets/gif/         Manual demo-GIF pipeline; each script's header is its usage doc
+index.html          Vite entry + inline pre-paint theme script
+roadmap.yaml        Example input
+vite.config.js      Preact alias, vitest config
+tsconfig.base.json  Shared strictness — app and server extend it, test extends app
+tsconfig.app.json   src/ — browser, bundler resolution
+tsconfig.server.json  server/ + bin/ — nodenext, emits the shipped JS
+tsconfig.test.json  tests/ — extends app, adds node types, references server
+tsconfig.json       Solution file — owns no source, just references the three
 ```
 
-### GanttChart layout
+`bin/*.js` and `server/*.js` are gitignored build output, shipped in the tarball.
 
-The chart is a scrollable flex layout — not a canvas or SVG. Key decisions:
+`pnpm typecheck` is `tsc --build`, which checks each project under its own
+runtime's rules. Two of those settings are load-bearing and were silent bugs
+before they existed: `tsconfig.app.json` sets `"types": []`, without which
+`process.env` in a component typechecks clean and dies in the browser; and
+`tsconfig.test.json` *references* the server project rather than including it.
+Both files explain themselves — read them before editing either.
 
-- Each row is `display: flex`: label cell (`width: 280px, position: sticky, left: 0`) + timeline cell (`flex: 1, minWidth: totalDays * DAY_W`). This means the timeline fills the card when content is shorter than the viewport, and triggers horizontal scroll when longer. **Do not add `minWidth: '100%'` to any wrapper div** — that was the source of a phantom empty-space bug.
-- Week gridlines use `repeating-linear-gradient` on `background-image` (zero DOM nodes, tiles infinitely to fill flex cells).
-- Hover crosshair: mouse position is tracked on the scrollable container ref. `xInTimeline = e.clientX - containerRect.left - LABEL_W + container.scrollLeft` gives the correct day offset accounting for scroll.
-- Initial scroll: a `useLayoutEffect` sets `scrollLeft` so today sits `TODAY_LEAD_IN` (7) days in from the left, instead of opening on `rangeStart` (= earliest task date − `RANGE_PAD`). It applies on the first pass where the container actually has layout (`clientWidth > 0`) and then latches on the `hasFocusedToday` ref. Once-only is deliberate — neither an SSE hot-reload nor a resize may move the user's scroll position. It keys off `containerWidth` rather than being mount-only because a chart mounted inside a `display: none` subtree has no layout box, so the assignment is silently discarded and today-focus is lost for any embedder that reveals the chart later (a reveal.js slide, a tab, an accordion). Roadmaps entirely in the past or future need no special case: the browser clamps `scrollLeft`, landing on the right edge or staying at the left.
+## Dates
 
-## CLI flags
+Everything from `parseDay` onward is a `Date` at local midnight, and all day math
+goes through `src/timeline.ts`.
 
-`--no-open` skips launching the browser. `--no-assignee-filter` hides the
-toolbar's assignee filter pills (the per-bar assignee chips are unaffected).
+- **Never move by raw milliseconds.** A DST day is 23 or 25 hours, so
+  `getTime() + n * 86_400_000` drifts onto 23:00 of the previous date and stays
+  there — that shipped as a duplicated column in the day header. Use `addDays`.
+- **js-yaml hands back UTC midnight and `parseYaml` reads UTC parts back out.**
+  That pairing is what makes it correct; reformatting it locally shifts every
+  date a day west of UTC.
+- Local midnight doesn't always exist (Chile starts DST at midnight), so never
+  assert it in a test.
 
-CLI options reach the client through the URL: `bin/cli.ts` appends them to the
-address it opens and prints (`?file=…&assigneeFilter=off`), and `readUrlOptions`
-in `src/urlOptions.ts` parses them back out. `App.tsx` calls it in a `useState`
-initializer, once per mount — **not at module scope.** Reading `window` while the
-module evaluates throws outside a browser, which makes `App.tsx` unimportable in
-the test suite's node environment. A client that navigates to a bare
-`http://localhost:3847/` gets defaults — the same tradeoff `?file=` already
-carries for the displayed filename.
+## Chart layout
+
+- Rows are flex: sticky label cell + timeline cell at `flex: 1, minWidth:
+  totalDays * BASE_DAY_W`. **Never add `minWidth: '100%'` to a wrapper** —
+  phantom empty-space bug.
+- Two `useLayoutEffect`s own `scrollLeft`: the focus-today latch, and the
+  re-anchor that holds the same *date* at the left edge when a reload moves
+  `rangeStart`. Both are subtler than they look and both must use `BASE_DAY_W`,
+  never `effectiveDayW`. Their comments in `GanttChart.tsx` are the spec — read
+  those before touching either.
+- `computeRange` pads asymmetrically (`−RANGE_PAD` leading, `+RANGE_PAD + 2`
+  trailing), so read `totalDays` off the function instead of re-deriving it.
 
 ## Testing
 
-`vitest run`, node environment, no DOM. Nothing renders components, so the rule
-is: **logic worth testing lives in a pure module, not inside a component.**
-`src/timeline.ts` exists for exactly that reason — the day-grid math was private
-to `GanttChart.tsx` and therefore unreachable, which is how a UTC-vs-local
-off-by-one in the today marker shipped.
+`pnpm test` (`vitest run`), node environment.
 
-`tests/timeline.test.ts` pins `process.env.TZ` to `America/New_York` for the
-whole file and hand-derives every expected value in that zone. Both properties
-are load-bearing: a UTC-only run cannot catch a local-vs-UTC mix-up, and New
-York has a DST transition that keeps `daysBetween`'s rounding honest. Feed
-`todayOffset` an explicit `now` rather than reading the clock inside it.
+- **Logic worth testing lives in a pure module, not a component.** `timeline.ts`,
+  `chartLayout.ts`, `popover.ts` and `bin/cliArgs.ts` were all extracted for that
+  reason. Extract rather than reach for a heavier harness.
+- `tests/` is typechecked by `tsconfig.test.json`, which is what catches a
+  misspelled property in `toBeUndefined()` or a `Task` fixture missing fields —
+  both pass vitest while asserting nothing. Don't move tests out of that project.
+- `tests/timeline.test.ts` pins `TZ=America/New_York` and hand-derives every
+  expectation in that zone; the DST transition is the point. Pass `todayOffset`
+  an explicit `now`.
+- **jsdom has no layout engine**: `clientWidth` and `getBoundingClientRect()`
+  read 0, so only `scrollLeft` assertions mean anything and real geometry needs a
+  browser. Keep DOM tests in `GanttChart.test.tsx` — jsdom costs ~800ms per file.
+- Prefer positive assertions; `not.toContain(x)` passes while state is `null`.
+- `App.tsx` is untested — mounting it needs `matchMedia`, `EventSource` and
+  `fetch` stubs.
 
-**Everything rendered is untested.** Nothing in `App.tsx` or `GanttChart.tsx`
-has coverage: bar and ghost-bar geometry, `effectiveDayW`, `dayTicks`, the
-assignee-chip flip, the scroll-focus latch, popover placement, `EmptyState`'s
-drag handling, and the empty-roadmap and hidden-filter render branches. Covering
-any of it means adding a jsdom environment and a rendering library first, which
-has not been done.
+## CLI
 
-Until then the cheaper move is to keep pulling logic out of the components: two
-functions still doing day math inline in `GanttChart.tsx` (`dayTicks` and
-`hoverDate`, both stepping by a fixed `86_400_000`) desync from the bars across
-a DST transition — the same class of bug `src/timeline.ts` was extracted to
-catch, still sitting where no test can reach it.
+```
+yaml-to-gantt <file.yaml> [--no-open] [--no-assignee-filter] [--help|-h]
+```
 
-## Releasing
-
-`package.json` holds a permanent `"version": "0.0.0"` placeholder — **do not bump
-it**. The git tag is the source of truth. Publishing a release (GitHub release
-on tag `vX.Y.Z`) triggers `.github/workflows/publish.yml`, which strips the `v`
-and runs `pnpm pkg set version=X.Y.Z` before `pnpm publish`, so the tarball
-carries the real version while the repo never drifts. A tag that isn't
-`vMAJOR.MINOR.PATCH` fails the job rather than publishing something wrong.
-
-Consequence: a local `pnpm pack` produces `0.0.0`. Nothing reads the version at
-runtime today; if a `--version` flag is ever added, it must read from the
-*packed* `package.json`, not assume the checked-in value is meaningful.
+- Add flags to `OPTIONS` in `bin/cliArgs.ts`, not `bin/cli.ts`. `cliArgs` is pure
+  and tested; `cli.ts` binds a socket at module scope and can't be imported by a
+  test. `parseArgs` then rejects unknown flags for free.
+- Flags cross to the client as `?file=…&assigneeFilter=off` — `bin/cli.ts` builds
+  it, `readUrlOptions` parses it, and only the parsing half is tested, so change
+  both sides together.
+- `App.tsx` reads those options in a `useState` initializer, **not at module
+  scope**: touching `window` on import throws outside a browser.
 
 ## Theming
 
-The app supports dark and light themes. The active theme is a plain object passed as a prop from `App` → `GanttChart` / `EmptyState` / `Pill`. All color tokens live in `src/themes.ts` — do not hardcode hex values in components.
+Tokens are `DARK` / `LIGHT` in `src/themes.ts`; use `theme.*` and add new colors
+there. Don't copy the surrounding code — about 60 raw color literals remain in
+`App.tsx` and `GanttChart.tsx` (`ACCENT` duplicates `theme.accent`, 18 hand-typed
+`rgba(79,142,247,…)`, plus `Pill`'s own palette). `PROJECT_COLORS` and
+`GHOST_BARS` are intentionally theme-independent; everything else is drift.
 
-**Toggle:** sun/moon icon button in the toolbar. Default: OS `prefers-color-scheme`. Override persisted to `localStorage` under key `theme` (`'dark'` | `'light'`). An inline script in `index.html` sets `colorScheme` before Preact loads to prevent a flash of the wrong theme.
+The inline script in `index.html` duplicates `getInitialTheme`'s logic to avoid a
+flash of the wrong theme — keep the two in sync.
+
+## Releasing
+
+`package.json` pins `"version": "0.0.0"` — **do not bump it.** The git tag is the
+source of truth, and `publish.yml` stamps it with `npm pkg set` (pnpm has no `pkg`
+command).
+
+`publish.yml`'s `pnpm typecheck` and `pnpm test` are **the only gate a release
+passes**: `validate.yml` is `pull_request`-only, `main` is unprotected, and
+releases are cut from direct pushes. `prepublishOnly` is not a gate — it runs
+`vite build`, which strips types without checking them.

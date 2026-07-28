@@ -18,6 +18,7 @@ This starts a local server, opens your browser, and renders the Gantt chart. The
 | --- | --- |
 | `--no-open` | Start the server without opening a browser |
 | `--no-assignee-filter` | Hide the assignee filter row to save vertical space. Assignee names still appear next to each bar |
+| `--help`, `-h` | Show usage and exit |
 
 ```bash
 npx yaml-to-gantt roadmap.yaml --no-open --no-assignee-filter
@@ -51,17 +52,19 @@ projects:
 - **projects**: top-level map of project names to task arrays
 - **name**: task label shown in the chart
 - **start** / **end**: date range (inclusive), in `YYYY-MM-DD` format
-- **assignees**: list of people assigned to the task (can be empty)
+- **assignees** _(optional)_: people assigned to the task; omit it or pass `[]` for none
 - **description** _(optional)_: surfaces in a hover popover via the trailing "?" marker on the task row. Rendered as raw HTML, so inline tags like `<b>` or `<a>` work (input is trusted — you author your own YAML)
 - **originallyPlannedStart** / **originallyPlannedEnd** _(optional)_: the task's original baseline dates. Set both to render the baseline alongside the actual `start`/`end`, making slippage and delays visible at a glance
 
 ## Features
 
-- **Live reload** — edit your YAML, see changes instantly
-- **Task descriptions** — add a `description` to any task; it surfaces in a hover popover (rich HTML supported)
-- **Delay visualization** — set `originallyPlannedStart`/`originallyPlannedEnd` to show a task's baseline alongside its actual dates
-- **Assignee filtering** — click pills to highlight specific people
-- **Hover crosshair** — hover over the timeline to see exact dates
-- **Light/dark theme** — toggle in the toolbar, defaults to OS preference
-- **New** — reset to empty state to drop in a different YAML file
-- **Zero config** — one command, no setup
+- **Multiple projects** — each becomes its own section with its own bar color
+- **Assignee filtering** — click a pill to highlight one person's tasks
+- **Hover crosshair** — read the exact date under the cursor
+- **Today marker** — the chart opens scrolled to today
+- **Light/dark theme** — toggle in the toolbar, defaults to your OS preference
+- **Drag and drop** — "New" clears the chart so you can drop in another YAML file
+
+## License
+
+MIT
