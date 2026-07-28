@@ -2,7 +2,7 @@ name: Publish Package
 
 on:
   release:
-    types: [ published ]
+    types: [published]
 
 permissions:
   id-token: write
@@ -25,6 +25,11 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      # Validate.yml runs on pull_request only, and releases are cut from direct
+      # pushes to main, so this is the final authoritative release gate
+      - run: pnpm typecheck
+      - run: pnpm test
 
       # package.json ships a 0.0.0 placeholder — the release tag is the source
       # of truth. Stamp after install so --frozen-lockfile sees the committed
