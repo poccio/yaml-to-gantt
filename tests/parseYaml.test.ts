@@ -152,6 +152,72 @@ projects:
     expect(tasks[0].originallyPlannedEnd).toBeUndefined();
   });
 
+  it('accepts a quoted date, which js-yaml hands over as a plain string', () => {
+    const yaml = `
+projects:
+  Solo:
+    - name: Quoted
+      start: "2026-04-01"
+      end: "2026-04-05"
+`;
+    const tasks = parseYaml(yaml);
+    expect(tasks[0].start).toBe('2026-04-01');
+    expect(tasks[0].end).toBe('2026-04-05');
+  });
+
+  // A bad date used to reach parseDay as an Invalid Date, which made computeRange
+  // return NaN and blanked every bar in the chart, not just this one.
+  it.each([
+    ['garbage', 'not-a-date'],
+    ['an unpadded month and day', '2025-7-1'],
+    ['month 13, which the Date constructor would roll into next year', '2025-13-01'],
+    ['a day that does not exist in that month', '2026-02-30'],
+    ['a trailing time', '2026-04-01T00:00:00Z'],
+  ])('rejects %s', (_label, value) => {
+    const yaml = `
+projects:
+  Solo:
+    - name: Junk date
+      start: "${value}"
+      end: 2026-08-10
+`;
+    expect(() => parseYaml(yaml)).toThrow(/start must be a YYYY-MM-DD date/);
+  });
+
+  it('names the project and task in the error so the row can be found', () => {
+    const yaml = `
+projects:
+  Product Launch:
+    - name: Beta release
+      start: 2026-04-01
+      end: "later"
+`;
+    expect(() => parseYaml(yaml)).toThrow('Product Launch / Beta release: end must be a YYYY-MM-DD date, got "later"');
+  });
+
+  it('rejects a bad baseline date too', () => {
+    const yaml = `
+projects:
+  Solo:
+    - name: Slipped
+      start: 2026-04-13
+      end: 2026-04-24
+      originallyPlannedStart: "nope"
+      originallyPlannedEnd: 2026-04-17
+`;
+    expect(() => parseYaml(yaml)).toThrow(/originallyPlannedStart must be a YYYY-MM-DD date/);
+  });
+
+  it('rejects a task with a missing start date', () => {
+    const yaml = `
+projects:
+  Solo:
+    - name: No Start
+      end: 2026-04-05
+`;
+    expect(() => parseYaml(yaml)).toThrow(/start must be a YYYY-MM-DD date/);
+  });
+
   it('coerces Date-object baseline values to YYYY-MM-DD strings', () => {
     const yaml = `
 projects:
