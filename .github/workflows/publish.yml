@@ -12,13 +12,14 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: latest
+      # No `version:` — the pnpm version comes from package.json's
+      # `packageManager` field, so CI and local dev cannot drift apart.
+      # action-setup v4+ errors if both are set and disagree.
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
           registry-url: https://registry.npmjs.org
