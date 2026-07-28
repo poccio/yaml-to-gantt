@@ -20,6 +20,22 @@ export function effectiveDayW(containerWidth: number, totalDays: number): number
     : BASE_DAY_W;
 }
 
+/** The timeline's floor width, held once the roadmap is too long to fit. */
+export function timelineMinW(totalDays: number): number {
+  return totalDays * BASE_DAY_W;
+}
+
+/**
+ * A row's full content width, label column included. Rows must be sized to this
+ * rather than left to stretch to the card: a row is the containing block of its
+ * own sticky label cell, and sticky cannot travel outside its containing block,
+ * so a row ending at the visible width abandons the labels partway along a
+ * scrolling timeline.
+ */
+export function rowMinW(totalDays: number): number {
+  return LABEL_W + timelineMinW(totalDays);
+}
+
 /**
  * The day offset under the cursor, `null` when there is no day there.
  *

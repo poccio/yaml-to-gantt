@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, taskBarGeometry } from '../src/chartLayout';
+import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, rowMinW, taskBarGeometry, timelineMinW } from '../src/chartLayout';
 import type { Task } from '../src/parseYaml';
 
 describe('effectiveDayW', () => {
@@ -25,6 +25,28 @@ describe('effectiveDayW', () => {
   test('holds at BASE_DAY_W exactly where the timeline fills the container', () => {
     // (1120 − 280) / 21 = 40 — the boundary between the two branches above.
     expect(effectiveDayW(1120, 21)).toBe(BASE_DAY_W);
+  });
+});
+
+describe('rowMinW', () => {
+  test('spans the label column plus the whole timeline', () => {
+    // 280 + 21 × 40 = 1120.
+    expect(rowMinW(21)).toBe(1120);
+  });
+
+  // The row is the containing block of its sticky label cell, so it has to reach
+  // the end of the scrollable content; a row stopping at the card's visible width
+  // drops the labels once scrollLeft passes container − LABEL_W.
+  test('reaches the full scroll width when the timeline overflows', () => {
+    expect(rowMinW(110)).toBe(LABEL_W + timelineMinW(110));
+    expect(rowMinW(110)).toBeGreaterThan(1694); // a card that scrolls
+  });
+
+  // Paired with effectiveDayW's boundary case: wider would reintroduce the
+  // phantom empty space, narrower would clip the labels.
+  test('matches the container exactly at the stretch/scroll boundary', () => {
+    expect(effectiveDayW(1120, 21)).toBe(BASE_DAY_W);
+    expect(rowMinW(21)).toBe(1120);
   });
 });
 

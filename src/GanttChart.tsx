@@ -5,7 +5,7 @@ import type { Theme } from './themes';
 import { addDays, computeRange, scrollShiftDays, todayOffset } from './timeline';
 import { CARET_HALF_EDGE, POPOVER_W, placePopover } from './popover';
 import type { PopoverPos } from './popover';
-import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, taskBarGeometry } from './chartLayout';
+import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, rowMinW, taskBarGeometry, timelineMinW } from './chartLayout';
 
 const ROW_H = 52;
 const PROJ_H = 54;
@@ -128,8 +128,9 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     !selectedAssignees ||
     task.assignees.some(a => selectedAssignees.has(a));
 
-  const timelineMinW = totalDays * BASE_DAY_W;
   const dayW = effectiveDayW(containerWidth, totalDays);
+  const tlMinW = timelineMinW(totalDays);
+  const rowW = rowMinW(totalDays);
 
   // Open focused on today, not on rangeStart, exactly once — neither an SSE
   // hot-reload nor a resize may move the user's scroll position afterwards.
@@ -237,7 +238,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
 
   const tlCell = (extra: JSX.CSSProperties = {}): JSX.CSSProperties => ({
     flex: 1,
-    minWidth: timelineMinW,
+    minWidth: tlMinW,
     position: 'relative',
     ...extra,
   });
@@ -251,6 +252,13 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     ...extra,
   });
 
+  const rowShell = (height: number, extra: JSX.CSSProperties = {}): JSX.CSSProperties => ({
+    display: 'flex',
+    height,
+    minWidth: rowW,
+    ...extra,
+  });
+
   return (
     <div
       ref={containerRef}
@@ -260,12 +268,11 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
       onScroll={() => setOpenTask(null)}
     >
 
-      <div style={{
+      <div style={rowShell(HDR_H, {
         position: 'sticky', top: 0, zIndex: 30,
-        display: 'flex', height: HDR_H,
         background: `linear-gradient(180deg, ${theme.headerBg} 0%, ${theme.surface} 100%)`,
         borderBottom: `1px solid ${theme.border}`,
-      }}>
+      })}>
         {/* Corner above the label column */}
         <div style={{
           ...labelCell(),
@@ -363,11 +370,10 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
         return (
           <div key={proj.name}>
 
-            <div style={{
-              display: 'flex', height: PROJ_H,
+            <div style={rowShell(PROJ_H, {
               opacity: hoveredRow !== null ? 0.4 : 1,
               transition: 'opacity 0.15s ease',
-            }}>
+            })}>
               <div style={{
                 ...labelCell({
                   backgroundColor: theme.surface,
@@ -414,11 +420,10 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                 <div
                   key={task.name}
                   onMouseEnter={() => setHoveredRow(rowId)}
-                  style={{
-                    display: 'flex', height: ROW_H,
+                  style={rowShell(ROW_H, {
                     opacity: hoveredRow !== null && !isRowHovered ? 0.4 : 1,
                     transition: 'opacity 0.15s ease',
-                  }}
+                  })}
                 >
                   <div style={{
                     ...labelCell({
