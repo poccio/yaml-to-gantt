@@ -27,4 +27,17 @@ describe('readUrlOptions', () => {
     expect(readUrlOptions('?assigneeFilter=on').hideAssigneeFilter).toBe(false);
     expect(readUrlOptions('?assigneeFilter').hideAssigneeFilter).toBe(false);
   });
+
+  test('hides empty projects only for emptyProjects=off', () => {
+    expect(readUrlOptions('?file=/x.yaml&emptyProjects=off').hideEmptyProjects).toBe(true);
+    expect(readUrlOptions('?file=/x.yaml').hideEmptyProjects).toBe(false);
+  });
+
+  // Showing empty projects is the default, so a page opened bare at localhost/
+  // with no query string at all must land on showing them.
+  test('shows empty projects for any other emptyProjects value', () => {
+    expect(readUrlOptions('').hideEmptyProjects).toBe(false);
+    expect(readUrlOptions('?emptyProjects=on').hideEmptyProjects).toBe(false);
+    expect(readUrlOptions('?emptyProjects').hideEmptyProjects).toBe(false);
+  });
 });

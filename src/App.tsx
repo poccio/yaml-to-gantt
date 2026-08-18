@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'preact/compat';
 import type { JSX } from 'preact';
 import { parseYaml } from './parseYaml';
-import type { Task } from './parseYaml';
+import type { Roadmap } from './parseYaml';
 import GanttChart from './GanttChart';
 import { DARK, LIGHT } from './themes';
 import type { Theme } from './themes';
@@ -16,13 +16,13 @@ function getInitialTheme(): Theme {
 }
 
 export default function App() {
-  const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
   const [selectedAssignees, setSelectedAssignees] = useState<Set<string> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   // Read on first render, not at module scope: touching `window` on import
   // throws outside a browser and makes this module unimportable in the tests.
-  const [{ file, hideAssigneeFilter }] = useState(() => readUrlOptions(window.location.search));
+  const [{ file, hideAssigneeFilter, hideEmptyProjects }] = useState(() => readUrlOptions(window.location.search));
   const [filename, setFilename] = useState<string | null>(file);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function App() {
 
   const loadYaml = (text: string, name?: string) => {
     try {
-      setTasks(parseYaml(text));
+      setRoadmap(parseYaml(text));
       setSelectedAssignees(null);
       setError(null);
       if (name) setFilename(name);
@@ -70,12 +70,12 @@ export default function App() {
   }, []);
 
   const allAssignees = useMemo(() => {
-    if (!tasks) return [];
-    return [...new Set(tasks.flatMap((t) => t.assignees))].sort();
-  }, [tasks]);
+    if (!roadmap) return [];
+    return [...new Set(roadmap.tasks.flatMap((t) => t.assignees))].sort();
+  }, [roadmap]);
 
   const reset = () => {
-    setTasks(null);
+    setRoadmap(null);
     setFilename(null);
     setSelectedAssignees(null);
     setError(null);
@@ -258,13 +258,19 @@ export default function App() {
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex' }}>
           {/* A zero-task array is a valid parse, but gives GanttChart no dates
               to build a range from — it would render NaN geometry. */}
-          {!tasks || !hasChartableRange(tasks)
+          {!roadmap || !hasChartableRange(roadmap.tasks)
             ? <EmptyState
                 theme={theme}
                 onLoad={loadYaml}
-                message={tasks ? 'No tasks in this file yet — add one to see the chart' : undefined}
+                message={roadmap ? 'No tasks in this file yet — add one to see the chart' : undefined}
               />
-            : <GanttChart tasks={tasks} selectedAssignees={selectedAssignees} theme={theme} />}
+            : <GanttChart
+                tasks={roadmap.tasks}
+                projects={roadmap.projects}
+                selectedAssignees={selectedAssignees}
+                hideEmptyProjects={hideEmptyProjects}
+                theme={theme}
+              />}
         </div>
       </div>
     </div>

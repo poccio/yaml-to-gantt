@@ -5,27 +5,32 @@ import { parseCliArgs, USAGE } from '../bin/cliArgs.js';
 // top-level `await start()` binds a socket and execSyncs a browser.
 
 describe('parseCliArgs', () => {
-  test('reads the file and both flags, in any order', () => {
-    expect(parseCliArgs(['roadmap.yaml', '--no-open', '--no-assignee-filter'])).toEqual({
+  test('reads the file and every flag, in any order', () => {
+    expect(parseCliArgs(['roadmap.yaml', '--no-open', '--no-assignee-filter', '--hide-empty-projects'])).toEqual({
       kind: 'run',
       file: 'roadmap.yaml',
       noOpen: true,
       noAssigneeFilter: true,
+      hideEmptyProjects: true,
     });
     expect(parseCliArgs(['--no-open', 'roadmap.yaml'])).toEqual({
       kind: 'run',
       file: 'roadmap.yaml',
       noOpen: true,
       noAssigneeFilter: false,
+      hideEmptyProjects: false,
     });
   });
 
-  test('defaults both flags to false', () => {
+  // Empty projects show by default, so the flag that hides them must default to
+  // false rather than merely be absent.
+  test('defaults every flag to false', () => {
     expect(parseCliArgs(['roadmap.yaml'])).toEqual({
       kind: 'run',
       file: 'roadmap.yaml',
       noOpen: false,
       noAssigneeFilter: false,
+      hideEmptyProjects: false,
     });
   });
 
@@ -37,6 +42,7 @@ describe('parseCliArgs', () => {
     ['--no-assigneefilter', 'missing hyphen'],
     ['--no-opne', 'transposed letters'],
     ['--assignee-filter=off', 'value form of a flag that does not exist'],
+    ['--hide-empty-project', 'singular typo'],
   ])('rejects %s (%s)', (flag) => {
     const result = parseCliArgs([flag, 'roadmap.yaml']);
 
@@ -96,7 +102,7 @@ describe('USAGE', () => {
   // The old usage text listed neither --help nor -h, because neither was a real
   // flag at the time.
   test('lists every flag parseCliArgs accepts', () => {
-    for (const flag of ['--no-open', '--no-assignee-filter', '--help', '-h']) {
+    for (const flag of ['--no-open', '--no-assignee-filter', '--hide-empty-projects', '--help', '-h']) {
       expect(USAGE).toContain(flag);
     }
   });

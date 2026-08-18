@@ -8,6 +8,7 @@ export const USAGE = [
   'Options:',
   '  --no-open              Start the server without opening a browser',
   '  --no-assignee-filter   Hide the assignee filter row to save vertical space',
+  '  --hide-empty-projects  Skip projects with no tasks to show, filtering included',
   '  --help, -h             Show this message',
   '',
   'Example:',
@@ -19,7 +20,7 @@ export const USAGE = [
  * a socket and shells out to a browser at module scope, so no test can import it.
  */
 export type CliCommand =
-  | { kind: 'run'; file: string; noOpen: boolean; noAssigneeFilter: boolean }
+  | { kind: 'run'; file: string; noOpen: boolean; noAssigneeFilter: boolean; hideEmptyProjects: boolean }
   /** 0 when usage was asked for, 1 when no file was given. */
   | { kind: 'usage'; exitCode: 0 | 1 }
   | { kind: 'error'; message: string };
@@ -27,6 +28,7 @@ export type CliCommand =
 const OPTIONS = {
   'no-open': { type: 'boolean', default: false },
   'no-assignee-filter': { type: 'boolean', default: false },
+  'hide-empty-projects': { type: 'boolean', default: false },
   help: { type: 'boolean', short: 'h', default: false },
 } as const;
 
@@ -53,5 +55,6 @@ export function parseCliArgs(argv: string[]): CliCommand {
     file: positionals[0],
     noOpen: values['no-open'],
     noAssigneeFilter: values['no-assignee-filter'],
+    hideEmptyProjects: values['hide-empty-projects'],
   };
 }

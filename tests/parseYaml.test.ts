@@ -33,7 +33,7 @@ projects:
 
 describe('parseYaml', () => {
   it('flattens a single project into task records', () => {
-    const tasks = parseYaml(SINGLE_PROJECT_YAML);
+    const { tasks } = parseYaml(SINGLE_PROJECT_YAML);
     expect(tasks).toHaveLength(2);
     expect(tasks[0]).toEqual({
       project: 'Project A',
@@ -52,14 +52,14 @@ describe('parseYaml', () => {
   });
 
   it('preserves project order across multiple projects', () => {
-    const tasks = parseYaml(MULTI_PROJECT_YAML);
+    const { tasks } = parseYaml(MULTI_PROJECT_YAML);
     expect(tasks).toHaveLength(2);
     expect(tasks[0].project).toBe('Alpha');
     expect(tasks[1].project).toBe('Beta');
   });
 
   it('returns start and end as YYYY-MM-DD strings (not Date objects)', () => {
-    const tasks = parseYaml(SINGLE_PROJECT_YAML);
+    const { tasks } = parseYaml(SINGLE_PROJECT_YAML);
     expect(typeof tasks[0].start).toBe('string');
     expect(tasks[0].start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
@@ -72,7 +72,7 @@ projects:
       start: 2026-04-01
       end: 2026-04-05
 `;
-    const tasks = parseYaml(yaml);
+    const { tasks } = parseYaml(yaml);
     expect(tasks[0].assignees).toEqual([]);
   });
 
@@ -85,17 +85,17 @@ projects:
       end: 2026-04-05
       description: "Ship the <b>v2</b> API."
 `;
-    const tasks = parseYaml(yaml);
+    const { tasks } = parseYaml(yaml);
     expect(tasks[0].description).toBe('Ship the <b>v2</b> API.');
   });
 
   it('leaves description undefined when the field is absent', () => {
-    const tasks = parseYaml(SINGLE_PROJECT_YAML);
+    const { tasks } = parseYaml(SINGLE_PROJECT_YAML);
     expect(tasks[0].description).toBeUndefined();
   });
 
   it('returns an empty array for an empty projects map', () => {
-    const tasks = parseYaml('projects: {}');
+    const { tasks } = parseYaml('projects: {}');
     expect(tasks).toEqual([]);
   });
 
@@ -113,7 +113,7 @@ projects:
       originallyPlannedStart: 2026-04-06
       originallyPlannedEnd: 2026-04-17
 `;
-    const tasks = parseYaml(yaml);
+    const { tasks } = parseYaml(yaml);
     expect(tasks[0].originallyPlannedStart).toBe('2026-04-06');
     expect(tasks[0].originallyPlannedEnd).toBe('2026-04-17');
   });
@@ -127,7 +127,7 @@ projects:
       end: 2026-04-24
       originallyPlannedEnd: 2026-04-17
 `;
-    const tasks = parseYaml(yaml);
+    const { tasks } = parseYaml(yaml);
     expect(tasks[0].originallyPlannedStart).toBeUndefined();
     expect(tasks[0].originallyPlannedEnd).toBeUndefined();
   });
@@ -141,13 +141,13 @@ projects:
       end: 2026-04-24
       originallyPlannedStart: 2026-04-06
 `;
-    const tasks = parseYaml(yaml);
+    const { tasks } = parseYaml(yaml);
     expect(tasks[0].originallyPlannedStart).toBeUndefined();
     expect(tasks[0].originallyPlannedEnd).toBeUndefined();
   });
 
   it('leaves baseline fields undefined when absent', () => {
-    const tasks = parseYaml(SINGLE_PROJECT_YAML);
+    const { tasks } = parseYaml(SINGLE_PROJECT_YAML);
     expect(tasks[0].originallyPlannedStart).toBeUndefined();
     expect(tasks[0].originallyPlannedEnd).toBeUndefined();
   });
@@ -160,7 +160,7 @@ projects:
       start: "2026-04-01"
       end: "2026-04-05"
 `;
-    const tasks = parseYaml(yaml);
+    const { tasks } = parseYaml(yaml);
     expect(tasks[0].start).toBe('2026-04-01');
     expect(tasks[0].end).toBe('2026-04-05');
   });
@@ -228,8 +228,61 @@ projects:
       originallyPlannedStart: 2026-04-06
       originallyPlannedEnd: 2026-04-17
 `;
-    const tasks = parseYaml(yaml);
+    const { tasks } = parseYaml(yaml);
     expect(typeof tasks[0].originallyPlannedStart).toBe('string');
     expect(tasks[0].originallyPlannedStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+// A project's tasks are what reaches the chart, but its *name* has to survive
+// even when it has none, or a project declared with an empty task list is
+// indistinguishable from a project that was never written down.
+describe('parseYaml project names', () => {
+  it('lists a project whose task list is empty', () => {
+    const { tasks, projects } = parseYaml(`
+projects:
+  Alpha:
+    - name: A1
+      start: 2026-04-01
+      end: 2026-04-05
+  Fallow: []
+`);
+
+    expect(projects).toEqual(['Alpha', 'Fallow']);
+    expect(tasks).toHaveLength(1);
+  });
+
+  // `Fallow:` with nothing after it is how a reader would first try to write an
+  // empty project, and js-yaml hands that back as null — which the flattening
+  // loop cannot iterate.
+  it('treats a project written with no value as empty rather than throwing', () => {
+    const { tasks, projects } = parseYaml(`
+projects:
+  Fallow:
+`);
+
+    expect(projects).toEqual(['Fallow']);
+    expect(tasks).toEqual([]);
+  });
+
+  it('keeps declaration order, so an empty project holds its place between two full ones', () => {
+    const { projects } = parseYaml(`
+projects:
+  Alpha:
+    - name: A1
+      start: 2026-04-01
+      end: 2026-04-05
+  Fallow: []
+  Beta:
+    - name: B1
+      start: 2026-04-06
+      end: 2026-04-10
+`);
+
+    expect(projects).toEqual(['Alpha', 'Fallow', 'Beta']);
+  });
+
+  it('returns no projects for an empty projects map', () => {
+    expect(parseYaml('projects: {}').projects).toEqual([]);
   });
 });

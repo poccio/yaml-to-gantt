@@ -46,11 +46,14 @@ interface DayTick {
 
 interface GanttChartProps {
   tasks: Task[];
+  /** Declaration order, empty projects included — see `Roadmap.projects`. */
+  projects: string[];
   selectedAssignees: Set<string> | null;
+  hideEmptyProjects: boolean;
   theme: Theme;
 }
 
-export default function GanttChart({ tasks, selectedAssignees, theme }: GanttChartProps) {
+export default function GanttChart({ tasks, projects: projectNames, selectedAssignees, hideEmptyProjects, theme }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverOffset, setHoverOffset] = useState<number | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
@@ -84,12 +87,11 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     return () => obs.disconnect();
   }, []);
 
-  const colorMap = useMemo(() => {
-    const names = [...new Set(tasks.map(t => t.project))];
-    return Object.fromEntries(
-      names.map((n, i) => [n, PROJECT_COLORS[i % PROJECT_COLORS.length]])
-    );
-  }, [tasks]);
+  // Keyed off the declared list, not off the tasks: an empty project has to hold
+  // its slot, or writing its first task recolours every project after it.
+  const colorMap = useMemo(() => Object.fromEntries(
+    projectNames.map((n, i) => [n, PROJECT_COLORS[i % PROJECT_COLORS.length]])
+  ), [projectNames]);
 
   const { rangeStart, totalDays, months, firstMondayOffset } = useMemo(
     () => computeRange(tasks),
@@ -118,14 +120,11 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     ? todayRawOffset
     : null;
 
-  const projects = useMemo((): Project[] => {
-    const names = [...new Set(tasks.map(t => t.project))];
-    return names.map(name => ({
-      name,
-      color: colorMap[name],
-      tasks: tasks.filter(t => t.project === name),
-    }));
-  }, [tasks, colorMap]);
+  const projects = useMemo((): Project[] => projectNames.map(name => ({
+    name,
+    color: colorMap[name],
+    tasks: tasks.filter(t => t.project === name),
+  })), [tasks, projectNames, colorMap]);
 
   const isVisible = (task: Task): boolean =>
     !selectedAssignees ||
@@ -432,7 +431,9 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
       {projects.map(proj => {
         const rgb = hexRgb(proj.color);
         const visibleTasks = proj.tasks.filter(isVisible);
-        if (visibleTasks.length === 0) return null;
+        // A project can be empty because the file declares it with no tasks or
+        // because the assignee filter hid all of them; the flag covers both.
+        if (visibleTasks.length === 0 && hideEmptyProjects) return null;
 
         return (
           <div key={proj.name}>

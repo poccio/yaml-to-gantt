@@ -19,7 +19,7 @@ if (command.kind === 'usage') {
   process.exit(command.exitCode);
 }
 
-const { file, noOpen, noAssigneeFilter } = command;
+const { file, noOpen, noAssigneeFilter, hideEmptyProjects } = command;
 const absPath = resolve(file);
 
 if (!existsSync(absPath)) {
@@ -36,7 +36,8 @@ const server = await start(absPath);
 const addr = server.address() as { port: number };
 const url =
   `http://localhost:${addr.port}?file=${encodeURIComponent(absPath)}` +
-  (noAssigneeFilter ? '&assigneeFilter=off' : '');
+  (noAssigneeFilter ? '&assigneeFilter=off' : '') +
+  (hideEmptyProjects ? '&emptyProjects=off' : '');
 
 console.log(`\n  yaml-to-gantt\n`);
 console.log(`  Serving ${absPath}`);

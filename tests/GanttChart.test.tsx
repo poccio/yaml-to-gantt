@@ -103,9 +103,25 @@ function scroller(): HTMLDivElement {
   return host.firstElementChild as HTMLDivElement;
 }
 
-function draw(tasks: Task[]) {
+interface DrawOpts {
+  /** Defaults to the projects the tasks themselves name, in first-seen order. */
+  projects?: string[];
+  selectedAssignees?: Set<string> | null;
+  hideEmptyProjects?: boolean;
+}
+
+function draw(tasks: Task[], opts: DrawOpts = {}) {
   act(() => {
-    render(<GanttChart tasks={tasks} selectedAssignees={null} theme={DARK} />, host);
+    render(
+      <GanttChart
+        tasks={tasks}
+        projects={opts.projects ?? [...new Set(tasks.map(t => t.project))]}
+        selectedAssignees={opts.selectedAssignees ?? null}
+        hideEmptyProjects={opts.hideEmptyProjects ?? false}
+        theme={DARK}
+      />,
+      host,
+    );
   });
 }
 
@@ -136,10 +152,19 @@ function hoverPill(): HTMLElement {
   return scroller().querySelector('[data-hover-pill]') as HTMLElement;
 }
 
+/** One element per rendered project, header row first inside each. */
+function projectGroups(): HTMLElement[] {
+  return [...scroller().children[1].children] as HTMLElement[];
+}
+
 /** The rows of the single project the fixtures produce: header row first. */
 function rows(): HTMLElement[] {
-  const group = scroller().children[1].firstElementChild as HTMLElement;
-  return [...group.children] as HTMLElement[];
+  return [...projectGroups()[0].children] as HTMLElement[];
+}
+
+/** The header label of each rendered project, in render order. */
+function projectNames(): string[] {
+  return projectGroups().map(g => g.querySelector('span')!.textContent!);
 }
 
 function cellOpacities(row: HTMLElement): string[] {
@@ -367,3 +392,67 @@ describe('rangeStart re-anchor', () => {
     }
   });
 });
+
+// A project with nothing under it is a real state of a roadmap — work that is
+// planned but not yet broken down — and dropping it silently makes the chart
+// disagree with the file it was rendered from.
+describe('empty projects', () => {
+  const FALLOW = ['Product Launch', 'Fallow'];
+
+  // Nothing here reads geometry, but GanttChart constructs a ResizeObserver on
+  // mount and jsdom has none.
+  let stubs: ReturnType<typeof installLayoutStubs>;
+  beforeEach(() => { stubs = installLayoutStubs(1182); });
+  afterEach(() => stubs.restore());
+
+  test('renders a project declared with no tasks as a bare header row', () => {
+    draw([task()], { projects: FALLOW });
+
+    expect(projectNames()).toEqual(FALLOW);
+    expect(projectGroups()[1].children).toHaveLength(1);
+  });
+
+  test('drops a project declared with no tasks when hideEmptyProjects is set', () => {
+    draw([task()], { projects: FALLOW, hideEmptyProjects: true });
+
+    expect(projectNames()).toEqual(['Product Launch']);
+  });
+
+  // The second source of emptiness: the project has tasks, the assignee filter
+  // is just hiding all of them. One setting governs both.
+  test('keeps a project whose tasks are all filtered out', () => {
+    draw([task({ assignees: ['Alice'] })], { selectedAssignees: new Set(['Zoe']) });
+
+    expect(projectNames()).toEqual(['Product Launch']);
+    expect(projectGroups()[0].children).toHaveLength(1);
+  });
+
+  test('drops a filter-emptied project when hideEmptyProjects is set', () => {
+    draw([task({ assignees: ['Alice'] })], {
+      selectedAssignees: new Set(['Zoe']),
+      hideEmptyProjects: true,
+    });
+
+    expect(projectGroups()).toHaveLength(0);
+  });
+
+  // Colours are handed out by position in the project list. Deriving that list
+  // from the tasks instead would skip the empty project, so writing 'Gap' its
+  // first task would recolour every project after it.
+  test('spends a colour slot on an empty project', () => {
+    const tasks = [task({ project: 'Fallow' }), task({ project: 'Late' })];
+
+    draw(tasks, { projects: ['Fallow', 'Gap', 'Late'] });
+    const third = headerColor('Late');
+
+    draw(tasks, { projects: ['Fallow', 'Late'] });
+
+    expect(third).not.toBe(headerColor('Late'));
+  });
+});
+
+/** The project header's name is painted in that project's assigned colour. */
+function headerColor(name: string): string {
+  const group = projectGroups().find(g => g.querySelector('span')!.textContent === name);
+  return (group!.querySelector('span') as HTMLElement).style.color;
+}

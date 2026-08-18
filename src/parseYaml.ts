@@ -22,7 +22,17 @@ interface YamlTaskItem {
 }
 
 interface YamlDocument {
-  projects: Record<string, YamlTaskItem[]>;
+  /** A project written as `Name:` with nothing under it arrives as null. */
+  projects: Record<string, YamlTaskItem[] | null>;
+}
+
+export interface Roadmap {
+  tasks: Task[];
+  /**
+   * Every project name in declaration order, including the ones with no tasks:
+   * `tasks` alone cannot tell an empty project from one that was never written.
+   */
+  projects: string[];
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -49,11 +59,11 @@ function toDateStr(val: string | Date, field: string, where: string): string {
   return s;
 }
 
-export function parseYaml(text: string): Task[] {
+export function parseYaml(text: string): Roadmap {
   const doc = yaml.load(text) as YamlDocument;
   const tasks: Task[] = [];
   for (const [project, items] of Object.entries(doc.projects)) {
-    for (const item of items) {
+    for (const item of items ?? []) {
       const where = `${project} / ${item.name}`;
       const hasBaseline =
         item.originallyPlannedStart != null && item.originallyPlannedEnd != null;
@@ -73,5 +83,5 @@ export function parseYaml(text: string): Task[] {
       });
     }
   }
-  return tasks;
+  return { tasks, projects: Object.keys(doc.projects) };
 }

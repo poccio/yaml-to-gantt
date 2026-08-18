@@ -20,9 +20,15 @@ projects:
       originallyPlannedStart: 2025-07-07             # optional baseline, both or neither
       originallyPlannedEnd: 2025-07-18
       assignees: [Bob, Carol]
+  Discovery: []                                    # a project may have no tasks
 ```
 
-`src/parseYaml.ts` flattens this into `Task[]` and **validates every date**. Keep
+`src/parseYaml.ts` flattens this into a `Roadmap` — `Task[]` plus the project
+names in declaration order — and **validates every date**. The name list exists
+because a flat `Task[]` cannot tell a project declared with no tasks from one
+that was never written; `Discovery:` with nothing under it is the same as `[]`.
+Keep the two halves aligned: `GanttChart` hands out colours by position in that
+list, so a project dropped from it recolours every project after it. Keep
 that validation: one Invalid Date poisons the min/max in `computeRange` and
 silently blanks the *whole* chart, not just the bad row. `description` is raw
 HTML — input is trusted.
@@ -93,20 +99,22 @@ outside it:
 ## CLI
 
 ```
-yaml-to-gantt <file.yaml> [--no-open] [--no-assignee-filter] [--help|-h]
+yaml-to-gantt <file.yaml> [--no-open] [--no-assignee-filter]
+                          [--hide-empty-projects] [--help|-h]
 ```
 
 - Add flags to `OPTIONS` in `bin/cliArgs.ts`, never to `bin/cli.ts`: `cliArgs` is
   pure and tested, while `cli.ts` binds a socket at module scope and can't be
   imported by a test. `parseArgs` then rejects unknown flags for free.
-- Flags cross to the client as `?file=…&assigneeFilter=off` — `bin/cli.ts` builds
+- Flags cross to the client as `?file=…&assigneeFilter=off&emptyProjects=off` — `bin/cli.ts` builds
   it, `readUrlOptions` parses it, and only the parsing half is tested. Change both
   sides together.
 - **The query string is not guaranteed to be there.** Someone can type
   `localhost:3849/` by hand and the chart still renders, so anything read off the
   URL is a preference, not a source of truth. The filename has a server-side
-  fallback (`X-Yaml-Path` on `/api/yaml`); `assigneeFilter=off` still has the hole,
-  and the fix shape is the same.
+  fallback (`X-Yaml-Path` on `/api/yaml`); `assigneeFilter=off` and
+  `emptyProjects=off` still have the hole, and the fix shape is the same. Both
+  default to the *showing* side, so a bare URL degrades to more chart, not less.
 
 ## Theming
 

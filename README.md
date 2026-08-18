@@ -18,6 +18,7 @@ This starts a local server, opens your browser, and renders the Gantt chart. The
 | --- | --- |
 | `--no-open` | Start the server without opening a browser |
 | `--no-assignee-filter` | Hide the assignee filter row to save vertical space. Assignee names still appear next to each bar |
+| `--hide-empty-projects` | Skip projects with no tasks to show. By default they render as a bare header row, whether the file declares them with no tasks or the assignee filter has hidden all of them |
 | `--help`, `-h` | Show usage and exit |
 
 ```bash

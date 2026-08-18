@@ -3,6 +3,8 @@ export interface UrlOptions {
   file: string | null;
   /** Set by the CLI's --no-assignee-filter flag. */
   hideAssigneeFilter: boolean;
+  /** Set by the CLI's --hide-empty-projects flag. */
+  hideEmptyProjects: boolean;
 }
 
 /**
@@ -15,5 +17,6 @@ export function readUrlOptions(search: string): UrlOptions {
   return {
     file: params.get('file') || null,
     hideAssigneeFilter: params.get('assigneeFilter') === 'off',
+    hideEmptyProjects: params.get('emptyProjects') === 'off',
   };
 }
