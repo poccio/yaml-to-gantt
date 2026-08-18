@@ -193,27 +193,43 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
     ? todayVisibleOffset * dayW
     : null;
 
+  // One tile is one week, so `backgroundSize` does the repeating and the stops
+  // only describe a single period. A `repeating-linear-gradient` left to fill the
+  // whole cell cannot be phased: its tile is the cell's width, and shifting it by
+  // `firstMondayOffset` days makes the strip left of the first Monday come from
+  // the *end* of the previous tile, which is only in phase when the cell happens
+  // to be a whole number of weeks wide.
+  const weekTile = `${7 * dayW}px 100%`;
+  // The Monday hairline, and the Sat–Sun fill it butts against. Order is
+  // load-bearing: the line paints over the fill's trailing edge, so the week
+  // boundary stays crisp instead of dissolving into Sunday's tint.
+  const weekLineLayer = `linear-gradient(
+    90deg,
+    ${theme.weekLineAlpha} 0px,
+    ${theme.weekLineAlpha} 1px,
+    transparent 1px
+  )`;
+  const weekendLayer = `linear-gradient(
+    90deg,
+    transparent 0px,
+    transparent ${5 * dayW}px,
+    ${theme.weekendBandAlpha} ${5 * dayW}px
+  )`;
+  const weekPhase = `${firstMondayOffset * dayW}px 0`;
+
   const weekGrid = {
-    backgroundImage: `
-      repeating-linear-gradient(
-        90deg,
-        ${theme.weekLineAlpha} 0px,
-        ${theme.weekLineAlpha} 1px,
-        transparent 1px,
-        transparent ${7 * dayW}px
-      ),
-      repeating-linear-gradient(
-        90deg,
-        ${theme.weekBandAlpha} 0px,
-        ${theme.weekBandAlpha} ${7 * dayW}px,
-        transparent ${7 * dayW}px,
-        transparent ${14 * dayW}px
-      )
-    `,
-    backgroundPosition: `
-      ${firstMondayOffset * dayW}px 0,
-      ${firstMondayOffset * dayW}px 0
-    `,
+    backgroundImage: `${weekLineLayer}, ${weekendLayer}`,
+    backgroundSize: `${weekTile}, ${weekTile}`,
+    backgroundPosition: `${weekPhase}, ${weekPhase}`,
+  };
+
+  // The day-number row takes the fill without the hairlines: months are already
+  // divided up there by a border, and a weekend column that starts at its own
+  // date reads as one object rather than as shading that begins below the header.
+  const weekendGrid = {
+    backgroundImage: weekendLayer,
+    backgroundSize: weekTile,
+    backgroundPosition: weekPhase,
   };
 
   // The cursor's own x, not the offset it resolved to: scrolling puts a different
@@ -294,7 +310,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
 
   // Hover dimming goes on the row, never on its cells. A sticky label cell at
   // `opacity: 0.4` is translucent over the timeline cell it exists to occlude,
-  // so the week bands and any bar scrolling underneath show straight through it.
+  // so the week grid and any bar scrolling underneath show straight through it.
   // Faded as a row, the label still paints opaquely over the timeline and only
   // the composite is blended with the surface behind.
   //
@@ -351,7 +367,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
             ))}
           </div>
 
-          <div style={{ position: 'relative', height: 38, overflow: 'visible' }}>
+          <div style={{ position: 'relative', height: 38, overflow: 'visible', ...weekendGrid }}>
             {dayTicks.map((d) => (
               <div key={d.offset} style={{
                 position: 'absolute',
