@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayBarClip } from '../src/chartLayout';
+import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayBarClip } from '../src/chartLayout';
 import type { Task } from '../src/parseYaml';
 
 describe('effectiveDayW', () => {
@@ -201,10 +201,25 @@ describe('taskBarGeometry', () => {
       originallyPlannedEnd: '2026-07-05',
     });
 
-    // Jun 29 is offset 2, Jul 5 is offset 8: left 80, width 7 * 40.
+    // Jun 29 is offset 2, Jul 5 is offset 8: left 80, width 7 * 40, then grown
+    // by the stroke on each side.
     expect(taskBarGeometry(slipped, RANGE_START, BASE_DAY_W).ghost).toEqual({
-      left: 80, width: 280,
+      left: 80 - GHOST_BORDER_W, width: 280 + 2 * GHOST_BORDER_W,
     });
+  });
+
+  // A shared edge used to eat the dashes: the stroke sat inside the ghost's box,
+  // on the same pixels as the bar, and the bar paints over it.
+  test('keeps the ghost stroke clear of a bar that starts or ends on the same day', () => {
+    const onTime = task({
+      originallyPlannedStart: '2026-07-01',
+      originallyPlannedEnd: '2026-07-11',
+    });
+
+    const { barLeft, barW, ghost } = taskBarGeometry(onTime, RANGE_START, BASE_DAY_W);
+
+    expect(ghost!.left + GHOST_BORDER_W).toBe(barLeft);
+    expect(ghost!.left + ghost!.width - GHOST_BORDER_W).toBe(barLeft + barW);
   });
 
   // Both-or-neither: treating a missing end as offset 0 draws a ghost from the

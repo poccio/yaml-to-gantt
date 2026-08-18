@@ -135,6 +135,12 @@ export interface BarGeometry {
 const MIN_BAR_W = 8;
 
 /**
+ * Width of the ghost outline's dashed stroke. Exported because the geometry
+ * below grows the box by it, so the renderer cannot pick its own.
+ */
+export const GHOST_BORDER_W = 1.5;
+
+/**
  * End dates are inclusive: a Jul 1 to Jul 11 task covers eleven columns. A
  * baseline needs both `originallyPlanned` dates; one alone is ignored rather
  * than half-drawn from the grid origin.
@@ -148,9 +154,14 @@ export function taskBarGeometry(task: Task, rangeStart: Date, dayW: number): Bar
   if (hasBaseline) {
     const baseStartOff = daysBetween(rangeStart, parseDay(task.originallyPlannedStart!));
     const baseEndOff = daysBetween(rangeStart, parseDay(task.originallyPlannedEnd!));
+    // The outline hugs the baseline span from *outside*: `border-box` draws the
+    // stroke inside the box, so on a date the bar shares it lands under the bar
+    // and gets painted over, leaving the dashes bitten out between the bar's
+    // rounded corners. Growing by the stroke keeps the box's inner edge on the
+    // day boundary.
     ghost = {
-      left: baseStartOff * dayW,
-      width: Math.max((baseEndOff - baseStartOff + 1) * dayW, MIN_BAR_W),
+      left: baseStartOff * dayW - GHOST_BORDER_W,
+      width: Math.max((baseEndOff - baseStartOff + 1) * dayW, MIN_BAR_W) + 2 * GHOST_BORDER_W,
     };
   }
 

@@ -5,7 +5,7 @@ import type { Theme } from './themes';
 import { addDays, computeRange, scrollShiftDays, todayOffset } from './timeline';
 import { CARET_HALF_EDGE, POPOVER_W, placePopover } from './popover';
 import type { PopoverPos } from './popover';
-import { BASE_DAY_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayBarClip } from './chartLayout';
+import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayBarClip } from './chartLayout';
 
 const ROW_H = 52;
 const PROJ_H = 54;
@@ -564,7 +564,7 @@ export default function GanttChart({ tasks, selectedAssignees, theme }: GanttCha
                         width: geo.ghost.width, height: 26, // taller than the live bar, so it frames it
                         borderRadius: 6,
                         background: theme.ghostFill,
-                        border: `1.5px dashed ${theme.ghostBorder}`,
+                        border: `${GHOST_BORDER_W}px dashed ${theme.ghostBorder}`,
                         opacity: selectedAssignees && !isHl && !isRowHovered ? 0.15 : 1,
                         transition: 'opacity 0.2s ease',
                         zIndex: 1, pointerEvents: 'none',
