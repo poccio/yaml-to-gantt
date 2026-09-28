@@ -5,16 +5,14 @@ import type { Theme } from './themes';
 import { addDays, computeRange, scrollShiftDays, todayOffset } from './timeline';
 import { CARET_HALF_EDGE, POPOVER_W, placePopover } from './popover';
 import type { PopoverPos } from './popover';
-import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayBarClip } from './chartLayout';
+import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayFocusScrollLeft } from './chartLayout';
 
 const ROW_H = 52;
 const PROJ_H = 54;
 const HDR_H = 68;
-// Days of past context left of "today" when the chart opens.
-const TODAY_LEAD_IN = 7;
-// Blur radius of the today marker's glow, which is also how far past the bar it
-// reaches — `todayBarClip` needs the same number the shadow is drawn with.
 const TODAY_GLOW_BLUR = 14;
+const POPOVER_OPEN_DELAY = 350;
+const POPOVER_CLOSE_DELAY = 140;
 
 const PROJECT_COLORS = [
   '#60a5fa', '#34d399', '#f472b6', '#fb923c',
@@ -37,6 +35,13 @@ interface Project {
   tasks: Task[];
 }
 
+interface OpenTask {
+  task: Task;
+  anchorRect: DOMRect;
+  /** Opened by a click: survives the pointer leaving, until clicked off. */
+  pinned: boolean;
+}
+
 interface DayTick {
   offset: number;
   dayNum: number;
@@ -57,27 +62,49 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverOffset, setHoverOffset] = useState<number | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
-  const [openTask, setOpenTask] = useState<{ task: Task; anchorRect: DOMRect } | null>(null);
+  const [openTask, setOpenTask] = useState<OpenTask | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Delayed so the pointer can travel from the marker onto the popover, e.g. to
-  // click a link inside it.
-  const popoverCloseTimer = useRef<number | null>(null);
-  const cancelPopoverClose = () => {
-    if (popoverCloseTimer.current !== null) {
-      clearTimeout(popoverCloseTimer.current);
-      popoverCloseTimer.current = null;
+  // Hover opens after a beat: every `?` sits on the path the pointer takes from
+  // the task names to the bars, and opening on contact popped one popover per row
+  // crossed. Closing waits too, so the pointer can travel from the marker onto
+  // the popover, e.g. to click a link inside it. One timer serves both — the
+  // latest intent replaces whatever was pending.
+  //
+  // Updates go through `prev` because a timer fires against the state of its
+  // own time, not of the render that armed it, and a pinned popover must win.
+  const popoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelPopoverTimer = () => {
+    if (popoverTimer.current !== null) {
+      clearTimeout(popoverTimer.current);
+      popoverTimer.current = null;
     }
   };
-  const openPopover = (task: Task, anchorRect: DOMRect) => {
-    cancelPopoverClose();
-    setOpenTask({ task, anchorRect });
+  const showPopover = (task: Task, anchor: HTMLElement) => {
+    cancelPopoverTimer();
+    setOpenTask(prev => prev?.pinned ? prev : { task, anchorRect: anchor.getBoundingClientRect(), pinned: false });
+  };
+  const schedulePopoverOpen = (task: Task, anchor: HTMLElement) => {
+    cancelPopoverTimer();
+    popoverTimer.current = setTimeout(() => showPopover(task, anchor), POPOVER_OPEN_DELAY);
   };
   const schedulePopoverClose = () => {
-    cancelPopoverClose();
-    popoverCloseTimer.current = window.setTimeout(() => setOpenTask(null), 140);
+    cancelPopoverTimer();
+    popoverTimer.current = setTimeout(
+      () => setOpenTask(prev => prev?.pinned ? prev : null),
+      POPOVER_CLOSE_DELAY,
+    );
   };
-  useEffect(() => cancelPopoverClose, []);
+  // A click pins, so the popover stays for reading after the pointer leaves, and
+  // a second click on the same `?` unpins and closes. A tap lands here too, after
+  // the focus that already opened it unpinned.
+  const togglePinnedPopover = (task: Task, anchor: HTMLElement) => {
+    cancelPopoverTimer();
+    setOpenTask(prev => prev?.pinned && prev.task === task
+      ? null
+      : { task, anchorRect: anchor.getBoundingClientRect(), pinned: true });
+  };
+  useEffect(() => cancelPopoverTimer, []);
 
   useEffect(() => {
     const obs = new ResizeObserver(([entry]) => {
@@ -141,17 +168,19 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
   // no layout box, so the scrollLeft assignment is silently discarded, leaving
   // an embedder that reveals it later (a reveal.js slide, a tab, an accordion)
   // stuck at rangeStart. Latch on the first pass that has layout instead.
-  //
-  // Out-of-range roadmaps need no special case — the browser clamps scrollLeft.
   const hasFocusedToday = useRef(false);
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (hasFocusedToday.current || !container || container.clientWidth === 0) return;
-    // BASE_DAY_W, not dayW: where the two differ the timeline fits the
-    // container and there is nothing to scroll.
-    container.scrollLeft = (todayRawOffset - TODAY_LEAD_IN) * BASE_DAY_W;
+    container.scrollLeft = todayFocusScrollLeft(todayRawOffset);
     hasFocusedToday.current = true;
   }, [containerWidth, todayRawOffset]);
+
+  // Smooth, unlike the latch: a jump is disorienting after the user has scrolled
+  // away, while on open there is no previous position to lose track of.
+  const focusToday = () => {
+    containerRef.current?.scrollTo({ left: todayFocusScrollLeft(todayRawOffset), behavior: 'smooth' });
+  };
 
   // Holding scroll across an SSE reload means holding the *date* at the left
   // edge, not the pixel: a reload that adds an earlier task moves rangeStart and
@@ -307,24 +336,6 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
     ...extra,
   });
 
-  // Hover dimming goes on the row, never on its cells. A sticky label cell at
-  // `opacity: 0.4` is translucent over the timeline cell it exists to occlude,
-  // so the week grid and any bar scrolling underneath show straight through it.
-  // Faded as a row, the label still paints opaquely over the timeline and only
-  // the composite is blended with the surface behind.
-  //
-  // The cost is that a faded row is a stacking context, which scopes the label
-  // cell's zIndex inside the row: anything overlaying the rows from outside
-  // outranks the labels, whatever their zIndex says. Nothing may be painted over
-  // the label column from out there — see `todayBarClip`.
-  //
-  // Same reason the today bar is one full-height element rather than a segment
-  // per row: a segment inside a timeline cell fades with it.
-  const dimmed = (faded: boolean): JSX.CSSProperties => ({
-    opacity: faded ? 0.4 : 1,
-    transition: 'opacity 0.15s ease',
-  });
-
   return (
     <div
       ref={containerRef}
@@ -339,13 +350,46 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
         background: `linear-gradient(180deg, ${theme.headerBg} 0%, ${theme.surface} 100%)`,
         borderBottom: `1px solid ${theme.border}`,
       })}>
-        {/* Corner above the label column */}
+        {/* Corner above the label column — sticky on both axes, so the one spot
+            a control stays reachable wherever the timeline is scrolled. */}
         <div style={{
           ...labelCell(),
           zIndex: 31,
           background: `linear-gradient(180deg, ${theme.headerBg} 0%, ${theme.surface} 100%)`,
           borderRight: `1px solid ${theme.border}`,
-        }} />
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+          padding: '0 10px 8px',
+        }}>
+          <button
+            data-focus-today
+            onClick={focusToday}
+            title="Scroll to today"
+            style={{
+              fontSize: 12, lineHeight: 1,
+              padding: '5px 10px',
+              borderRadius: 5,
+              border: `1px solid ${theme.border}`,
+              background: 'none',
+              color: theme.textMuted,
+              cursor: 'pointer',
+              fontFamily: "'JetBrains Mono', monospace",
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              transition: 'color 0.12s, border-color 0.12s',
+            }}
+            onMouseEnter={(e) => {
+              const b = e.currentTarget as HTMLButtonElement;
+              b.style.color = theme.accent;
+              b.style.borderColor = theme.accent;
+            }}
+            onMouseLeave={(e) => {
+              const b = e.currentTarget as HTMLButtonElement;
+              b.style.color = theme.textMuted;
+              b.style.borderColor = theme.border;
+            }}
+          >
+            Today
+          </button>
+        </div>
 
         <div style={tlCell()}>
 
@@ -426,8 +470,10 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
         </div>
       </div>
 
-      {/* Wraps the rows so the today bar can span them all — see `dimmed`. */}
-      <div style={{ position: 'relative' }}>
+      {/* Wraps the rows so the today bar can span them all, and so leaving them —
+          for the header, the spacer below, a popover portalled to <body> — ends
+          the row highlight rather than stranding it on the last row crossed. */}
+      <div style={{ position: 'relative' }} onMouseLeave={() => setHoveredRow(null)}>
       {projects.map(proj => {
         const rgb = hexRgb(proj.color);
         const visibleTasks = proj.tasks.filter(isVisible);
@@ -438,7 +484,7 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
         return (
           <div key={proj.name}>
 
-            <div style={rowShell(PROJ_H, dimmed(hoveredRow !== null))}>
+            <div style={rowShell(PROJ_H)} onMouseEnter={() => setHoveredRow(null)}>
               <div style={{
                 ...labelCell({
                   backgroundColor: theme.surface,
@@ -484,8 +530,9 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
               return (
                 <div
                   key={task.name}
+                  data-hovered={isRowHovered || undefined}
                   onMouseEnter={() => setHoveredRow(rowId)}
-                  style={rowShell(ROW_H, dimmed(hoveredRow !== null && !isRowHovered))}
+                  style={rowShell(ROW_H)}
                 >
                   <div style={{
                     ...labelCell({
@@ -509,7 +556,9 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
                       {task.name}
                     </span>
                     <button
+                      data-popover-anchor
                       aria-label="Task details"
+                      aria-expanded={openTask?.task === task}
                       style={{
                         flexShrink: 0, marginLeft: 8,
                         width: 18, height: 18, borderRadius: '50%',
@@ -527,7 +576,7 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
                         b.style.color = theme.accent;
                         b.style.borderColor = theme.accent;
                         b.style.background = `rgba(${hexRgb(theme.accent)},0.14)`;
-                        openPopover(task, b.getBoundingClientRect());
+                        schedulePopoverOpen(task, b);
                       }}
                       onMouseLeave={(e) => {
                         const b = e.currentTarget as HTMLButtonElement;
@@ -536,8 +585,9 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
                         b.style.background = theme.chipBg;
                         schedulePopoverClose();
                       }}
-                      onFocus={(e) => openPopover(task, (e.currentTarget as HTMLButtonElement).getBoundingClientRect())}
+                      onFocus={(e) => showPopover(task, e.currentTarget as HTMLButtonElement)}
                       onBlur={schedulePopoverClose}
+                      onClick={(e) => togglePinnedPopover(task, e.currentTarget as HTMLButtonElement)}
                     >
                       ?
                     </button>
@@ -621,7 +671,6 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
             width: 2,
             background: `linear-gradient(180deg, ${ACCENT}, rgba(79,142,247,0.6))`,
             boxShadow: `0 0 ${TODAY_GLOW_BLUR}px rgba(79,142,247,0.5), 0 0 4px rgba(79,142,247,0.8)`,
-            clipPath: todayBarClip({ x: todayX, scrollLeft, blur: TODAY_GLOW_BLUR }),
             zIndex: 4, pointerEvents: 'none',
           }} />
         )}
@@ -635,7 +684,7 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
           anchorRect={openTask.anchorRect}
           theme={theme}
           onClose={() => setOpenTask(null)}
-          onHoverEnter={cancelPopoverClose}
+          onHoverEnter={cancelPopoverTimer}
           onHoverLeave={schedulePopoverClose}
         />
       )}
@@ -668,7 +717,11 @@ function TaskInfoPopover({ task, anchorRect, theme, onClose, onHoverEnter, onHov
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     const onDocClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      const target = e.target as Element;
+      // A `?` click already decided — pin, unpin or switch — in its own handler,
+      // which runs first; closing here would undo it.
+      if (target.closest?.('[data-popover-anchor]')) return;
+      if (ref.current && !ref.current.contains(target)) onClose();
     };
     const onResize = () => onClose();
     document.addEventListener('keydown', onKey);

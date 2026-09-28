@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayBarClip } from '../src/chartLayout';
+import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayFocusScrollLeft } from '../src/chartLayout';
 import type { Task } from '../src/parseYaml';
 
 describe('effectiveDayW', () => {
@@ -25,6 +25,13 @@ describe('effectiveDayW', () => {
   test('holds at BASE_DAY_W exactly where the timeline fills the container', () => {
     // (1120 − 280) / 21 = 40 — the boundary between the two branches above.
     expect(effectiveDayW(1120, 21)).toBe(BASE_DAY_W);
+  });
+});
+
+describe('todayFocusScrollLeft', () => {
+  test('leaves a week of past context left of today', () => {
+    // (31 − 7) × 40 = 960.
+    expect(todayFocusScrollLeft(31)).toBe(960);
   });
 });
 
@@ -102,33 +109,6 @@ describe('isBehindLabelColumn', () => {
   test('follows the day width it is given', () => {
     expect(isBehindLabelColumn({ offset: 10, dayW: 56, scrollLeft: 500 })).toBe(false);
     expect(isBehindLabelColumn({ offset: 10, dayW: 40, scrollLeft: 500 })).toBe(true);
-  });
-});
-
-describe('todayBarClip', () => {
-  // Away from the labels the clip must not quietly reshape the marker.
-  test('leaves the glow whole when the bar is clear of the label column', () => {
-    expect(todayBarClip({ x: 400, scrollLeft: 0, blur: 14 }))
-      .toBe('inset(-14px -14px -14px -14px)');
-  });
-
-  test('cuts the glow at the bar when it sits on the label column edge', () => {
-    expect(todayBarClip({ x: 400, scrollLeft: 400, blur: 14 }))
-      .toBe('inset(-14px -14px -14px 0px)');
-  });
-
-  // Between the two the reach tracks the gap exactly, so there is no visible step
-  // as the bar scrolls in and out.
-  test('lets the glow reach the label column edge and stop', () => {
-    expect(todayBarClip({ x: 405, scrollLeft: 400, blur: 14 }))
-      .toBe('inset(-14px -14px -14px -5px)');
-  });
-
-  // Without the Math.max this would read `inset(... 5px)` and eat into the 2px
-  // bar rather than its glow.
-  test('never clips into the bar itself', () => {
-    expect(todayBarClip({ x: 395, scrollLeft: 400, blur: 14 }))
-      .toBe('inset(-14px -14px -14px 0px)');
   });
 });
 

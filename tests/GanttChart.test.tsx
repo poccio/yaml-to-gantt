@@ -167,8 +167,16 @@ function projectNames(): string[] {
   return projectGroups().map(g => g.querySelector('span')!.textContent!);
 }
 
-function cellOpacities(row: HTMLElement): string[] {
-  return [...row.children].map(cell => (cell as HTMLElement).style.opacity);
+function enter(el: Element) {
+  act(() => { el.dispatchEvent(new Event('mouseenter')); });
+}
+
+function leave(el: Element) {
+  act(() => { el.dispatchEvent(new Event('mouseleave')); });
+}
+
+function hoveredRowCount(): number {
+  return scroller().querySelectorAll('[data-hovered]').length;
 }
 
 describe('initial scroll latch', () => {
@@ -219,6 +227,34 @@ describe('initial scroll latch', () => {
   });
 });
 
+describe('today button', () => {
+  // jsdom has no Element.scrollTo; stand in with an instant scroll.
+  beforeEach(() => {
+    HTMLElement.prototype.scrollTo = function (this: HTMLElement, opts?: ScrollToOptions | number) {
+      if (typeof opts === 'object' && opts.left !== undefined) this.scrollLeft = opts.left;
+    } as HTMLElement['scrollTo'];
+  });
+  afterEach(() => {
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollTo;
+  });
+
+  test('scrolls back to where the chart first opened', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([task()]);
+      scroller().scrollLeft = 3000;
+
+      act(() => {
+        (scroller().querySelector('[data-focus-today]') as HTMLButtonElement).click();
+      });
+
+      expect(scroller().scrollLeft).toBe(FOCUSED_SCROLL);
+    } finally {
+      stubs.restore();
+    }
+  });
+});
+
 // A roadmap that brackets the pinned today, which the fixture above does not:
 //   rangeStart = Jul 1 − RANGE_PAD(4) = Sat Jun 27 2026, totalDays = 72
 //   today is Jul 28 2026, so the marker sits at 31 * BASE_DAY_W(40)
@@ -263,26 +299,6 @@ describe('today marker', () => {
       scrollTo(TODAY_X);
 
       expect(todayMarkerCount()).toBe(3);
-    } finally {
-      stubs.restore();
-    }
-  });
-
-  // The pure clip is covered in chartLayout.test.ts; this pins that the component
-  // feeds it the *live* scrollLeft rather than a stale mirror of it.
-  test('lets the glow reach the label column edge and no further', () => {
-    const stubs = installLayoutStubs(1182);
-    try {
-      draw([spanningToday()]);
-
-      scrollTo(TODAY_X);
-      expect(todayBar().style.clipPath).toBe('inset(-14px -14px -14px 0px)');
-
-      scrollTo(TODAY_X - 10);
-      expect(todayBar().style.clipPath).toBe('inset(-14px -14px -14px -10px)');
-
-      scrollTo(0);
-      expect(todayBar().style.clipPath).toBe('inset(-14px -14px -14px -14px)');
     } finally {
       stubs.restore();
     }
@@ -353,24 +369,102 @@ describe('hover pill', () => {
   });
 });
 
-describe('hover dimming', () => {
-  // The cell assertions are the point: a faded sticky label cell goes translucent
-  // over the timeline it exists to occlude. See `dimmed` in GanttChart.tsx.
-  test('fades whole rows and leaves the cells opaque', () => {
-    const stubs = installLayoutStubs(1182);
-    try {
-      draw([task(), task({ name: 'Second' })]);
-      const [projectRow, hovered, peer] = rows();
+describe('row hover', () => {
+  let stubs: ReturnType<typeof installLayoutStubs>;
+  beforeEach(() => { stubs = installLayoutStubs(1182); });
+  afterEach(() => stubs.restore());
 
-      act(() => { hovered.dispatchEvent(new Event('mouseenter')); });
+  test('highlights the hovered row without fading the others', () => {
+    draw([task(), task({ name: 'Second' })]);
+    const [projectRow, hovered, peer] = rows();
 
-      expect([projectRow, hovered, peer].map(r => r.style.opacity)).toEqual(['0.4', '1', '0.4']);
-      expect(cellOpacities(projectRow)).toEqual(['', '']);
-      expect(cellOpacities(hovered)).toEqual(['', '']);
-      expect(cellOpacities(peer)).toEqual(['', '']);
-    } finally {
-      stubs.restore();
-    }
+    enter(hovered);
+
+    expect(hovered.hasAttribute('data-hovered')).toBe(true);
+    expect(hoveredRowCount()).toBe(1);
+    expect([projectRow, hovered, peer].map(r => r.style.opacity)).toEqual(['', '', '']);
+  });
+
+  // The highlight used to clear only on leaving the whole chart, so it stayed on
+  // the last task crossed while the pointer rested on a header.
+  test('clears on moving onto a project header', () => {
+    draw([task()]);
+    const [projectRow, taskRow] = rows();
+
+    enter(taskRow);
+    enter(projectRow);
+
+    expect(hoveredRowCount()).toBe(0);
+  });
+
+  test('clears on leaving the rows', () => {
+    draw([task()]);
+
+    enter(rows()[1]);
+    leave(scroller().children[1]);
+
+    expect(hoveredRowCount()).toBe(0);
+  });
+});
+
+describe('task details popover', () => {
+  let stubs: ReturnType<typeof installLayoutStubs>;
+  beforeEach(() => { stubs = installLayoutStubs(1182); });
+  afterEach(() => stubs.restore());
+  // The file-wide setup fakes Date alone, and re-faking over it is a no-op.
+  beforeEach(() => {
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(new Date(2026, 6, 28));
+  });
+
+  function anchor(): HTMLButtonElement {
+    return scroller().querySelector('[data-popover-anchor]') as HTMLButtonElement;
+  }
+
+  function popoverOpen(): boolean {
+    return document.body.textContent!.includes('No description yet');
+  }
+
+  function advance(ms: number) {
+    act(() => { vi.advanceTimersByTime(ms); });
+  }
+
+  // A pointer crossing the label column on its way to the bars must not pop one
+  // popover per row.
+  test('ignores a pointer passing over the marker', () => {
+    draw([task()]);
+
+    enter(anchor());
+    advance(200);
+    leave(anchor());
+    advance(1000);
+
+    expect(popoverOpen()).toBe(false);
+  });
+
+  test('opens once the pointer rests on the marker', () => {
+    draw([task()]);
+
+    enter(anchor());
+    advance(400);
+
+    expect(popoverOpen()).toBe(true);
+  });
+
+  // The click used to reach the document listener too, which read it as a click
+  // outside the popover and closed what the hover had just opened.
+  test('stays open after a click until the marker is clicked again', () => {
+    draw([task()]);
+
+    enter(anchor());
+    act(() => { anchor().click(); });
+    leave(anchor());
+    advance(1000);
+    expect(popoverOpen()).toBe(true);
+
+    act(() => { anchor().click(); });
+    expect(popoverOpen()).toBe(false);
   });
 });
 

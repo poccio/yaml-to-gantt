@@ -24,6 +24,20 @@ export function timelineMinW(totalDays: number): number {
   return totalDays * BASE_DAY_W;
 }
 
+// Days of past context left of "today" when the chart focuses it.
+export const TODAY_LEAD_IN = 7;
+
+/**
+ * The scrollLeft that puts today `TODAY_LEAD_IN` days in from the label column.
+ *
+ * `BASE_DAY_W`, not `effectiveDayW`: where the two differ the timeline fits the
+ * container and there is nothing to scroll. Out-of-range offsets need no special
+ * case — the browser clamps scrollLeft to the nearest end.
+ */
+export function todayFocusScrollLeft(todayRawOffset: number): number {
+  return (todayRawOffset - TODAY_LEAD_IN) * BASE_DAY_W;
+}
+
 /**
  * A row's full content width, label column included. Rows must be sized to this
  * rather than left to stretch to the card: a row is the containing block of its
@@ -75,24 +89,6 @@ export function isBehindLabelColumn({ offset, dayW, scrollLeft }: {
   scrollLeft: number;
 }): boolean {
   return offset * dayW < scrollLeft;
-}
-
-/**
- * `clip-path` for the today bar, letting its glow reach left only as far as the
- * label column's edge.
- *
- * The bar is never drawn behind the labels, but it is drawn *flush against* them
- * — and `blur` around a 2px line reaches well past the edge, onto labels that sit
- * inside faded rows and cannot outrank it. Nothing is lost by cutting it:
- * everything left of that edge is under an opaque column anyway.
- */
-export function todayBarClip({ x, scrollLeft, blur }: {
-  x: number;
-  scrollLeft: number;
-  blur: number;
-}): string {
-  const leftReach = Math.min(blur, Math.max(0, x - scrollLeft));
-  return `inset(${-blur}px ${-blur}px ${-blur}px ${-leftReach}px)`;
 }
 
 // The hover pill is 13px monospace with 9px of side padding. Approximated for

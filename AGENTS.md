@@ -85,11 +85,11 @@ outside it:
 - Three `useLayoutEffect`s touch scroll. The focus-today latch and the `rangeStart`
   re-anchor must use `BASE_DAY_W`, never `effectiveDayW`; the third only mirrors
   `scrollLeft` and is **declared last**, so it sees what the other two just set.
-- **Hover dimming goes on the row, never on its cells** — a faded sticky label cell
-  goes translucent over the timeline it exists to occlude. The consequence is the
-  trap: a faded row is a stacking context, so **nothing overlaying the rows from
-  outside can reach the label column**, whatever zIndex the labels carry. The today
-  bar clips its own glow instead of being covered.
+- **Hover highlights one row; it never fades the others.** Dimming every other row
+  read as the whole chart flashing on each pass of the pointer. It also carried a
+  trap worth knowing before reviving it: `opacity` on a row makes it a stacking
+  context, so the sticky labels stop outranking overlays from outside the row
+  (the today bar's glow), and on a cell it turns the label translucent.
 - **The crosshair stores the cursor's `clientX`, not the day offset it resolved
   to.** Scrolling puts a new day under a still pointer, and because the pill is
   clamped, a stale offset parks a wrong date at the label edge.
