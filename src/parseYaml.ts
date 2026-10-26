@@ -3,6 +3,11 @@ import yaml from 'js-yaml';
 export interface Task {
   project: string;
   name: string;
+  /**
+   * 0-based position within the project's list in the file. `/api/move` names a
+   * task by project + index, so the server's lookup and this value must agree.
+   */
+  index: number;
   start: string;
   end: string;
   assignees: string[];
@@ -63,13 +68,14 @@ export function parseYaml(text: string): Roadmap {
   const doc = yaml.load(text) as YamlDocument;
   const tasks: Task[] = [];
   for (const [project, items] of Object.entries(doc.projects)) {
-    for (const item of items ?? []) {
+    for (const [index, item] of (items ?? []).entries()) {
       const where = `${project} / ${item.name}`;
       const hasBaseline =
         item.originallyPlannedStart != null && item.originallyPlannedEnd != null;
       tasks.push({
         project,
         name: item.name,
+        index,
         start: toDateStr(item.start, 'start', where),
         end: toDateStr(item.end, 'end', where),
         assignees: item.assignees ?? [],

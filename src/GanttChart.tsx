@@ -2,10 +2,10 @@ import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } f
 import type { JSX } from 'preact';
 import type { Task } from './parseYaml';
 import type { Theme } from './themes';
-import { addDays, computeRange, scrollShiftDays, todayOffset } from './timeline';
+import { addDays, computeRange, daysBetween, dragLabel, parseDay, scrollShiftDays, shiftTask, todayOffset } from './timeline';
 import { CARET_HALF_EDGE, POPOVER_W, placePopover } from './popover';
 import type { PopoverPos } from './popover';
-import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayFocusScrollLeft } from './chartLayout';
+import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, dragShiftDays, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayFocusScrollLeft } from './chartLayout';
 
 const ROW_H = 52;
 const PROJ_H = 54;
@@ -42,6 +42,22 @@ interface OpenTask {
   pinned: boolean;
 }
 
+interface Drag {
+  task: Task;
+  originX: number;
+  shift: number;
+}
+
+interface PendingMove {
+  task: Task;
+  shift: number;
+}
+
+/** The identity the server moves a task by — see `Task.index`. */
+function isSameTask(a: Task, b: Task): boolean {
+  return a.project === b.project && a.index === b.index;
+}
+
 interface DayTick {
   offset: number;
   dayNum: number;
@@ -56,9 +72,15 @@ interface GanttChartProps {
   selectedAssignees: Set<string> | null;
   hideEmptyProjects: boolean;
   theme: Theme;
+  /**
+   * Absent turns dragging off. Resolves whether the save landed: on `true` the
+   * bar holds its drop until the next `tasks` replaces it, on `false` it snaps
+   * back.
+   */
+  onMoveTask?: (task: Task, start: string, end: string) => Promise<boolean>;
 }
 
-export default function GanttChart({ tasks, projects: projectNames, selectedAssignees, hideEmptyProjects, theme }: GanttChartProps) {
+export default function GanttChart({ tasks, projects: projectNames, selectedAssignees, hideEmptyProjects, theme, onMoveTask }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverOffset, setHoverOffset] = useState<number | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
@@ -160,6 +182,71 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
   const dayW = effectiveDayW(containerWidth, totalDays);
   const tlMinW = timelineMinW(totalDays);
   const rowW = rowMinW(totalDays);
+
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [pending, setPending] = useState<PendingMove | null>(null);
+
+  // A reload ends both. It may have changed the very dates being dragged, and a
+  // drop computed from the old ones would overwrite that edit; and it brings a
+  // pending move's new dates, which the drop offset would then be added on top of.
+  useLayoutEffect(() => {
+    setDrag(null);
+    setPending(null);
+  }, [tasks]);
+
+  const startDrag = (task: Task, e: JSX.TargetedPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || drag || pending) return;
+    // Otherwise the sweep selects the task names it crosses.
+    e.preventDefault();
+    // So the release still arrives when it happens outside the window. jsdom
+    // has no pointer capture.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setDrag({ task, originX: e.clientX, shift: 0 });
+  };
+
+  // Layout, not passive: Preact runs a passive effect a frame late, and a quick
+  // click's pointerup landing in that gap would leave the drag live, to be
+  // dropped by the next click anywhere.
+  useLayoutEffect(() => {
+    if (!drag || !onMoveTask) return;
+    const { task, originX, shift } = drag;
+
+    const onMove = (e: PointerEvent) => {
+      const next = dragShiftDays({
+        dx: e.clientX - originX,
+        dayW,
+        startOff: daysBetween(rangeStart, parseDay(task.start)),
+        endOff: daysBetween(rangeStart, parseDay(task.end)),
+        totalDays,
+      });
+      if (next !== shift) setDrag({ task, originX, shift: next });
+    };
+    const onUp = () => {
+      setDrag(null);
+      if (shift === 0) return;
+      const move = { task, shift };
+      setPending(move);
+      // Only this drop's: by the time a failed save answers, a reload may have
+      // cleared it and a new drop taken its place. A rejection is a failed save
+      // too; left pending, it would block every later drag.
+      const snapBack = () => setPending(p => p === move ? null : p);
+      const { start, end } = shiftTask(task, shift);
+      onMoveTask(task, start, end).then(saved => { if (!saved) snapBack(); }, snapBack);
+    };
+    const cancel = () => setDrag(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cancel(); };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [drag, onMoveTask, dayW, rangeStart, totalDays]);
 
   // Open focused on today, not on rangeStart, exactly once — neither an SSE
   // hot-reload nor a resize may move the user's scroll position afterwards.
@@ -522,8 +609,13 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
               const rowId = `${proj.name}::${task.name}`;
               const isRowHovered = hoveredRow === rowId;
 
+              const moved = drag ?? pending;
+              const shift = moved && isSameTask(moved.task, task) ? moved.shift : 0;
+              const isDragged = !!drag && isSameTask(drag.task, task);
+              const liveLeft = geo.barLeft + shift * dayW;
+
               const chipLeft = chipX({
-                barLeft: geo.barLeft, barW: geo.barW,
+                barLeft: liveLeft, barW: geo.barW,
                 assignees: task.assignees, totalDays, dayW,
               });
 
@@ -622,16 +714,41 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
                       }} />
                     )}
 
-                    <div style={{
-                      position: 'absolute',
-                      left: geo.barLeft, top: '50%', transform: 'translateY(-50%)',
-                      width: geo.barW, height: 18, borderRadius: 5,
-                      background: `linear-gradient(180deg, ${proj.color} 0%, ${proj.color}cc 100%)`,
-                      boxShadow: `0 2px 8px rgba(${rgb},0.3), 0 0 0 0.5px rgba(${rgb},0.2)`,
-                      opacity: selectedAssignees && !isHl && !isRowHovered ? 0.15 : 1,
-                      transition: 'opacity 0.2s ease',
-                      zIndex: 2,
-                    }} />
+                    {isDragged && (
+                      <div style={{
+                        position: 'absolute',
+                        left: geo.barLeft, top: '50%', transform: 'translateY(-50%)',
+                        width: geo.barW, height: 18, borderRadius: 5,
+                        boxSizing: 'border-box',
+                        border: `1px dashed ${theme.borderHover}`,
+                        zIndex: 1, pointerEvents: 'none',
+                      }} />
+                    )}
+
+                    <div
+                      data-task-bar
+                      onPointerDown={onMoveTask && ((e) => startDrag(task, e))}
+                      style={{
+                        position: 'absolute',
+                        left: liveLeft, top: '50%', transform: 'translateY(-50%)',
+                        width: geo.barW, height: 18, borderRadius: 5,
+                        background: `linear-gradient(180deg, ${proj.color} 0%, ${proj.color}cc 100%)`,
+                        boxShadow: `0 2px 8px rgba(${rgb},0.3), 0 0 0 0.5px rgba(${rgb},0.2)`,
+                        opacity: selectedAssignees && !isHl && !isRowHovered ? 0.15 : 1,
+                        transition: 'opacity 0.2s ease',
+                        cursor: onMoveTask ? (isDragged ? 'grabbing' : 'grab') : undefined,
+                        zIndex: 2,
+                      }}
+                    />
+
+                    {isDragged && (
+                      <DragLabel
+                        task={task}
+                        shift={shift}
+                        center={liveLeft + geo.barW / 2}
+                        theme={theme}
+                      />
+                    )}
 
                     {task.assignees.length > 0 && (
                       <div style={{
@@ -688,6 +805,40 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
           onHoverLeave={schedulePopoverClose}
         />
       )}
+    </div>
+  );
+}
+
+interface DragLabelProps {
+  task: Task;
+  shift: number;
+  /** Timeline x of the dragged bar's middle. */
+  center: number;
+  theme: Theme;
+}
+
+function DragLabel({ task, shift, center, theme }: DragLabelProps) {
+  const { start, end } = shiftTask(task, shift);
+  const text = dragLabel(start, end, shift);
+  const slipAt = text.lastIndexOf(' ') + 1;
+  return (
+    <div style={{
+      position: 'absolute', left: center,
+      bottom: 'calc(50% + 13px)', // the bar's 9px half-height, plus a 4px gap
+      transform: 'translateX(-50%)',
+      background: theme.raised,
+      border: `1px solid ${theme.borderHover}`,
+      color: theme.text,
+      fontSize: 12, lineHeight: 1,
+      padding: '4px 8px', borderRadius: 5,
+      fontFamily: "'JetBrains Mono', monospace",
+      whiteSpace: 'nowrap',
+      // It overhangs the row above: over that row's bars and the today bar, still
+      // under the sticky label column.
+      zIndex: 10, pointerEvents: 'none',
+    }}>
+      {text.slice(0, slipAt)}
+      <span style={{ color: theme.accent, fontWeight: 600 }}>{text.slice(slipAt)}</span>
     </div>
   );
 }

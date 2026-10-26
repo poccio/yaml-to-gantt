@@ -65,6 +65,7 @@ projects:
 - **Today marker** — the chart opens scrolled to today
 - **Light/dark theme** — toggle in the toolbar, defaults to your OS preference
 - **Drag and drop** — "New" clears the chart so you can drop in another YAML file
+- **Drag to reschedule** — drag a bar to move the task by whole days. The new dates are written back into your YAML file, leaving comments and formatting alone, and a task with no baseline keeps its old dates as `originallyPlannedStart` / `originallyPlannedEnd`. Works on the file the CLI serves, not on a dropped one
 
 ## License
 

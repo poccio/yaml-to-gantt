@@ -199,3 +199,21 @@ export function chipX({
 
   return overflowsRight && fitsLeft ? barLeft - approxChipW - 6 : chipAtRight;
 }
+
+/**
+ * Whole days a dragged bar has moved, snapped to the nearest column and clamped
+ * so neither end leaves the grid. The clamp is what keeps a drop inside
+ * `computeRange`'s padding, where every offset is still a drawn column.
+ */
+export function dragShiftDays({
+  dx, dayW, startOff, endOff, totalDays,
+}: {
+  dx: number;
+  dayW: number;
+  startOff: number;
+  endOff: number;
+  totalDays: number;
+}): number {
+  const shift = Math.round(dx / dayW);
+  return Math.min(Math.max(shift, -startOff), totalDays - 1 - endOff);
+}

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayFocusScrollLeft } from '../src/chartLayout';
+import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, dragShiftDays, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayFocusScrollLeft } from '../src/chartLayout';
 import type { Task } from '../src/parseYaml';
 
 describe('effectiveDayW', () => {
@@ -158,6 +158,7 @@ function task(overrides: Partial<Task> = {}): Task {
   return {
     project: 'Product Launch',
     name: 'Market research',
+    index: 0,
     start: '2026-07-01',
     end: '2026-07-11',
     assignees: [],
@@ -253,5 +254,19 @@ describe('chipX', () => {
     expect(chipX({
       barLeft: 160, barW: 440, assignees: [], totalDays: 21, dayW: 40,
     })).toBe(606);
+  });
+});
+
+describe('dragShiftDays', () => {
+  test('dragShiftDays snaps to the nearest day', () => {
+    const base = { dayW: 40, startOff: 5, endOff: 8, totalDays: 30 };
+    expect(dragShiftDays({ ...base, dx: 59 })).toBe(1);
+    expect(dragShiftDays({ ...base, dx: 61 })).toBe(2);
+  });
+
+  test('dragShiftDays clamps to the grid', () => {
+    const base = { dayW: 40, startOff: 2, endOff: 5, totalDays: 10 };
+    expect(dragShiftDays({ ...base, dx: -400 })).toBe(-2);
+    expect(dragShiftDays({ ...base, dx: 400 })).toBe(4);
   });
 });

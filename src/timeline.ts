@@ -33,6 +33,13 @@ export function parseDay(s: string): Date {
   return new Date(year, month - 1, day);
 }
 
+/** The inverse of `parseDay`: `YYYY-MM-DD` from *local* parts, never `toISOString`, which is UTC. */
+export function formatDay(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
 export function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
@@ -126,4 +133,19 @@ export function todayOffset(rangeStart: Date, now: Date): number {
  */
 export function hasChartableRange(tasks: Task[]): boolean {
   return tasks.length > 0;
+}
+
+/** Both dates moved by the same whole days, so the task keeps its length. */
+export function shiftTask(task: Task, days: number): { start: string; end: string } {
+  return {
+    start: formatDay(addDays(parseDay(task.start), days)),
+    end: formatDay(addDays(parseDay(task.end), days)),
+  };
+}
+
+/** The floating label shown while dragging, e.g. `Jul 9 → Jul 17 +3d`. */
+export function dragLabel(start: string, end: string, shift: number): string {
+  const short = (s: string) =>
+    parseDay(s).toLocaleString('en-US', { month: 'short', day: 'numeric' });
+  return `${short(start)} → ${short(end)} ${shift < 0 ? '-' : '+'}${Math.abs(shift)}d`;
 }

@@ -40,16 +40,19 @@ bin/
   cli.ts            Entry — validates the path, starts the server, opens the browser
   cliArgs.ts        Pure argv → CliCommand, plus USAGE
 server/
-  index.ts          Static dist/, /api/yaml, /api/events (SSE), fs.watch
+  index.ts          Static dist/, /api/yaml, /api/events (SSE), /api/move, fs.watch
+  moveTask.ts       The YAML splicer behind /api/move
 src/
   main.tsx          Preact entry point
-  App.tsx           Card layout, file loading, filter pills, theme toggle; also
-                    EmptyState and Pill
+  App.tsx           Card layout, file loading and saving, filter pills, theme
+                    toggle; also EmptyState and Pill
   GanttChart.tsx    Chart renderer, Preact + CSS; also TaskInfoPopover
   timeline.ts       Calendar-day math — parseDay, addDays, daysBetween, computeRange, …
   chartLayout.ts    Pixel math — BASE_DAY_W, LABEL_W, effectiveDayW, bar/chip/hover
                     geometry
   popover.ts        placePopover
+  assigneeFilter.ts Filter rules — assigneesOf, toggleAssignee, pruneAssigneeFilter
+  saveMove.ts       POST /api/move → whether the saved file is back on screen
   parseYaml.ts      YAML → validated Task[]
   urlOptions.ts     Query string → CLI options
   themes.ts         DARK / LIGHT tokens
@@ -96,6 +99,27 @@ outside it:
 - `computeRange` pads asymmetrically, so read `totalDays` off it instead of
   re-deriving it.
 
+## Server
+
+Dragging a bar writes the user's file: `POST /api/move` takes
+`{ version, project, index, start, end }` and splices the new dates in.
+
+- **What a move may rewrite, and what it refuses with a 422, is the
+  `server/moveTask.ts` docstrings.** Read them before touching the splicer.
+- **`version` is the `X-Yaml-Version` of the roadmap on screen**, and a mismatch
+  is a 409, so an edit made after the chart loaded is never overwritten. Which
+  token the client keeps, and when it has none, is the `version` state in
+  `App.tsx`; without one it passes no `onMoveTask`, so a dropped file can't be
+  dragged and never writes to the served path.
+- **`Task.index` names the task** (its docstring in `src/parseYaml.ts`). Never
+  derive it from the flattened or filtered `Task[]`.
+- **Write in place** with `fs.writeFileSync` on the same path, never to a temp
+  file and rename (why: the write in `server/index.ts`).
+- **The server binds `127.0.0.1` only, and the CLI opens that literal address,
+  never `localhost`** (why: the URL in `bin/cli.ts`). `/api/move` also requires
+  an `Origin` of `http://localhost:<port>` or `http://127.0.0.1:<port>` (why: the
+  check in `server/index.ts`).
+
 ## CLI
 
 ```
@@ -110,7 +134,7 @@ yaml-to-gantt <file.yaml> [--no-open] [--no-assignee-filter]
   it, `readUrlOptions` parses it, and only the parsing half is tested. Change both
   sides together.
 - **The query string is not guaranteed to be there.** Someone can type
-  `localhost:3849/` by hand and the chart still renders, so anything read off the
+  `127.0.0.1:3847/` by hand and the chart still renders, so anything read off the
   URL is a preference, not a source of truth. The filename has a server-side
   fallback (`X-Yaml-Path` on `/api/yaml`); `assigneeFilter=off` and
   `emptyProjects=off` still have the hole, and the fix shape is the same. Both

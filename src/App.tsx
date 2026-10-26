@@ -1,12 +1,14 @@
-import { useState, useMemo, useEffect } from 'preact/compat';
+import { useState, useMemo, useEffect, useRef } from 'preact/compat';
 import type { JSX } from 'preact';
 import { parseYaml } from './parseYaml';
-import type { Roadmap } from './parseYaml';
+import type { Roadmap, Task } from './parseYaml';
 import GanttChart from './GanttChart';
 import { DARK, LIGHT } from './themes';
 import type { Theme } from './themes';
 import { readUrlOptions } from './urlOptions';
 import { hasChartableRange } from './timeline';
+import { assigneesOf, toggleAssignee, pruneAssigneeFilter } from './assigneeFilter';
+import { saveMove } from './saveMove';
 
 function getInitialTheme(): Theme {
   const stored = localStorage.getItem('theme');
@@ -19,6 +21,16 @@ export default function App() {
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
   const [selectedAssignees, setSelectedAssignees] = useState<Set<string> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout>>();
+  // The token of the last roadmap that *parsed*, not of the last fetch: one
+  // from a file that failed to parse can match a later edit whose indices have
+  // shifted under the stale chart, and the server would move the wrong task.
+  // `null` whenever the chart is not showing the served file.
+  const [version, setVersion] = useState<string | null>(null);
+  // Mirrors `version` for `fetchYaml`, which the SSE handler captures once and
+  // so would otherwise compare against the first render's `null` forever.
+  const shownVersion = useRef<string | null>(null);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   // Read on first render, not at module scope: touching `window` on import
   // throws outside a browser and makes this module unimportable in the tests.
@@ -36,33 +48,70 @@ export default function App() {
     document.documentElement.style.colorScheme = next.colorScheme;
   };
 
-  const loadYaml = (text: string, name?: string) => {
+  // `served` marks a reload of the watched file, which keeps the filter; a
+  // dropped file is a different roadmap, so it starts from All.
+  const loadYaml = (text: string, name?: string, served?: { version: string | null }): boolean => {
     try {
-      setRoadmap(parseYaml(text));
-      setSelectedAssignees(null);
+      const parsed = parseYaml(text);
+      setRoadmap(parsed);
+      if (served) {
+        const all = assigneesOf(parsed.tasks);
+        setSelectedAssignees((prev) => pruneAssigneeFilter(prev, all));
+      } else {
+        setSelectedAssignees(null);
+      }
+      shownVersion.current = served?.version ?? null;
+      setVersion(shownVersion.current);
       setError(null);
       if (name) setFilename(name);
+      return true;
     } catch (err) {
       setError(`Failed to parse YAML: ${(err as Error).message}`);
+      return false;
     }
   };
 
-  useEffect(() => {
-    const fetchYaml = async () => {
-      try {
-        const r = await fetch('/api/yaml');
-        if (!r.ok || (r.headers.get('content-type') ?? '').includes('text/html')) return;
-        // `?file=` is only a preference: it is gone whenever the page was opened
-        // bare at localhost/ instead of through the URL the CLI prints, and the
-        // response header is the same answer, always available.
-        const served = r.headers.get('X-Yaml-Path');
-        const text = await r.text();
-        if (text) loadYaml(text, file ?? (served ? decodeURIComponent(served) : undefined));
-      } catch {
-        // No server behind the page — the drop zone is still a way in.
+  const fetchYaml = async (): Promise<boolean> => {
+    try {
+      const r = await fetch('/api/yaml');
+      if (!r.ok || (r.headers.get('content-type') ?? '').includes('text/html')) return false;
+      // `?file=` is only a preference: it is gone whenever the page was opened
+      // bare at the server root instead of through the URL the CLI prints, and
+      // the response header is the same answer, always available.
+      const servedPath = r.headers.get('X-Yaml-Path');
+      const text = await r.text();
+      if (!text) return false;
+      const fetchedVersion = r.headers.get('X-Yaml-Version');
+      // A save is followed by two reloads, its own and the SSE one, and the
+      // second would hand `GanttChart` new `tasks` that cancel a drag begun in
+      // between. Same bytes as on screen means there is nothing to redraw.
+      if (fetchedVersion !== null && fetchedVersion === shownVersion.current) {
+        setError(null);
+        return true;
       }
-    };
+      return loadYaml(text, file ?? (servedPath ? decodeURIComponent(servedPath) : undefined), {
+        version: fetchedVersion,
+      });
+    } catch {
+      // No server behind the page — the drop zone is still a way in.
+      return false;
+    }
+  };
 
+  const showNotice = (message: string) => {
+    clearTimeout(noticeTimer.current);
+    setNotice(message);
+    noticeTimer.current = setTimeout(() => setNotice(null), 4000);
+  };
+
+  const onMoveTask = version === null
+    ? undefined
+    : (task: Task, start: string, end: string) => saveMove(
+        { version, project: task.project, index: task.index, start, end },
+        { reload: fetchYaml, notify: showNotice },
+      );
+
+  useEffect(() => {
     fetchYaml();
     const events = new EventSource('/api/events');
     events.onmessage = () => fetchYaml();
@@ -71,24 +120,17 @@ export default function App() {
 
   const allAssignees = useMemo(() => {
     if (!roadmap) return [];
-    return [...new Set(roadmap.tasks.flatMap((t) => t.assignees))].sort();
+    return assigneesOf(roadmap.tasks);
   }, [roadmap]);
 
   const reset = () => {
     setRoadmap(null);
     setFilename(null);
     setSelectedAssignees(null);
+    shownVersion.current = null;
+    setVersion(null);
     setError(null);
-  };
-
-  const toggleAssignee = (name: string) => {
-    setSelectedAssignees((prev) => {
-      if (prev === null) return new Set([name]);
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next.size === 0 || next.size === allAssignees.length ? null : next;
-    });
+    setNotice(null);
   };
 
   const displayName = filename;
@@ -171,8 +213,9 @@ export default function App() {
               </span>
             )}
 
-            {error && (
-              <span style={{ fontSize: 12, color: theme.error }}>{error}</span>
+            {/* `notice` can carry a server message, so it stays a text child. */}
+            {(error ?? notice) && (
+              <span style={{ fontSize: 12, color: theme.error }}>{error ?? notice}</span>
             )}
 
             <button
@@ -246,7 +289,7 @@ export default function App() {
                   key={name}
                   theme={theme}
                   active={selectedAssignees?.has(name) ?? false}
-                  onClick={() => toggleAssignee(name)}
+                  onClick={() => setSelectedAssignees((prev) => toggleAssignee(prev, name, allAssignees))}
                 >
                   {name}
                 </Pill>
@@ -270,6 +313,7 @@ export default function App() {
                 selectedAssignees={selectedAssignees}
                 hideEmptyProjects={hideEmptyProjects}
                 theme={theme}
+                onMoveTask={onMoveTask}
               />}
         </div>
       </div>

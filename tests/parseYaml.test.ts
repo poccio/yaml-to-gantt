@@ -38,6 +38,7 @@ describe('parseYaml', () => {
     expect(tasks[0]).toEqual({
       project: 'Project A',
       name: 'Task 1',
+      index: 0,
       start: '2026-04-06',
       end: '2026-04-10',
       assignees: ['Alice', 'Bob'],
@@ -45,10 +46,29 @@ describe('parseYaml', () => {
     expect(tasks[1]).toEqual({
       project: 'Project A',
       name: 'Task 2',
+      index: 1,
       start: '2026-04-13',
       end: '2026-04-17',
       assignees: [],
     });
+  });
+
+  it('numbers tasks within their own project', () => {
+    const { tasks } = parseYaml(`
+projects:
+  A:
+    - name: A1
+      start: 2026-04-01
+      end: 2026-04-05
+    - name: A2
+      start: 2026-04-06
+      end: 2026-04-10
+  B:
+    - name: B1
+      start: 2026-04-01
+      end: 2026-04-05
+`);
+    expect(tasks.map(t => [t.project, t.index])).toEqual([['A', 0], ['A', 1], ['B', 0]]);
   });
 
   it('preserves project order across multiple projects', () => {

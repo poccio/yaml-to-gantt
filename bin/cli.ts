@@ -34,8 +34,10 @@ if (!statSync(absPath).isFile()) {
 
 const server = await start(absPath);
 const addr = server.address() as { port: number };
+// The literal address we bound, not `localhost`: a browser tries `::1` first, so
+// another process holding that port on IPv6 would capture it instead of us.
 const url =
-  `http://localhost:${addr.port}?file=${encodeURIComponent(absPath)}` +
+  `http://127.0.0.1:${addr.port}?file=${encodeURIComponent(absPath)}` +
   (noAssigneeFilter ? '&assigneeFilter=off' : '') +
   (hideEmptyProjects ? '&emptyProjects=off' : '');
 

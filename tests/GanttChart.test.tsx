@@ -25,6 +25,7 @@ function task(overrides: Partial<Task> = {}): Task {
   return {
     project: 'Product Launch',
     name: 'Market research',
+    index: 0,
     start: '2026-07-01',
     end: '2026-07-11',
     assignees: [],
@@ -108,6 +109,7 @@ interface DrawOpts {
   projects?: string[];
   selectedAssignees?: Set<string> | null;
   hideEmptyProjects?: boolean;
+  onMoveTask?: (task: Task, start: string, end: string) => Promise<boolean>;
 }
 
 function draw(tasks: Task[], opts: DrawOpts = {}) {
@@ -119,6 +121,7 @@ function draw(tasks: Task[], opts: DrawOpts = {}) {
         selectedAssignees={opts.selectedAssignees ?? null}
         hideEmptyProjects={opts.hideEmptyProjects ?? false}
         theme={DARK}
+        onMoveTask={opts.onMoveTask}
       />,
       host,
     );
@@ -550,3 +553,165 @@ function headerColor(name: string): string {
   const group = projectGroups().find(g => g.querySelector('span')!.textContent === name);
   return (group!.querySelector('span') as HTMLElement).style.color;
 }
+
+// On the fixture grid (rangeStart Jun 27, dayW 40 — the ResizeObserver stub
+// never fires, so the chart keeps BASE_DAY_W) the Jul 1 bar starts at day 4.
+const BAR_LEFT = '160px';
+
+describe('dragging a bar', () => {
+  let stubs: ReturnType<typeof installLayoutStubs>;
+  beforeEach(() => { stubs = installLayoutStubs(1182); });
+  afterEach(() => stubs.restore());
+
+  function bar(): HTMLElement {
+    return scroller().querySelector('[data-task-bar]') as HTMLElement;
+  }
+
+  function firePointer(target: EventTarget, type: string, clientX: number) {
+    act(() => {
+      target.dispatchEvent(new PointerEvent(type, { clientX, button: 0, bubbles: true }));
+    });
+  }
+
+  /** Presses on the bar at x 100 and moves `dx`, leaving the button held. */
+  function grabAndMove(dx: number) {
+    firePointer(bar(), 'pointerdown', 100);
+    firePointer(window, 'pointermove', 100 + dx);
+  }
+
+  function release(dx: number) {
+    firePointer(window, 'pointerup', 100 + dx);
+  }
+
+  test('bars cannot be dragged without onMoveTask', () => {
+    draw([task()]);
+
+    expect(bar().style.cursor).not.toBe('grab');
+    grabAndMove(80);
+    release(80);
+    expect(bar().style.left).toBe(BAR_LEFT);
+  });
+
+  test('dragging a bar two days reports the shifted dates', () => {
+    const onMoveTask = vi.fn().mockResolvedValue(true);
+    draw([task()], { onMoveTask });
+
+    grabAndMove(80);
+    release(80);
+
+    expect(onMoveTask).toHaveBeenCalledWith(task(), '2026-07-03', '2026-07-13');
+  });
+
+  test('shows the new range while dragging', () => {
+    draw([task()], { onMoveTask: vi.fn().mockResolvedValue(true) });
+
+    grabAndMove(80);
+
+    expect(scroller().textContent).toContain('Jul 3 → Jul 13 +2d');
+  });
+
+  test('a release where it started saves nothing', () => {
+    const onMoveTask = vi.fn().mockResolvedValue(true);
+    draw([task()], { onMoveTask });
+
+    grabAndMove(15);
+    release(15);
+
+    expect(onMoveTask).not.toHaveBeenCalled();
+  });
+
+  test('Escape cancels a drag', () => {
+    const onMoveTask = vi.fn().mockResolvedValue(true);
+    draw([task()], { onMoveTask });
+
+    grabAndMove(80);
+    expect(scroller().textContent).toContain('→');
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    release(80);
+
+    expect(onMoveTask).not.toHaveBeenCalled();
+    expect(scroller().textContent).not.toContain('→');
+  });
+
+  test('pointercancel cancels a drag', () => {
+    const onMoveTask = vi.fn().mockResolvedValue(true);
+    draw([task()], { onMoveTask });
+
+    grabAndMove(80);
+    expect(scroller().textContent).toContain('→');
+    act(() => { window.dispatchEvent(new Event('pointercancel')); });
+    release(80);
+
+    expect(onMoveTask).not.toHaveBeenCalled();
+    expect(scroller().textContent).not.toContain('→');
+  });
+
+  // Otherwise the second save goes out against the version the first one just
+  // replaced, and comes back as a conflict.
+  test('ignores a new drag while a save is pending', () => {
+    const onMoveTask = vi.fn().mockReturnValue(new Promise<boolean>(() => {}));
+    draw([task()], { onMoveTask });
+
+    grabAndMove(80);
+    release(80);
+    grabAndMove(80);
+    release(80);
+
+    expect(onMoveTask).toHaveBeenCalledTimes(1);
+  });
+
+  test('snaps back when the save fails', async () => {
+    draw([task()], { onMoveTask: vi.fn().mockResolvedValue(false) });
+
+    grabAndMove(80);
+    release(80);
+    expect(bar().style.left).toBe('240px');
+    await act(async () => {});
+
+    expect(bar().style.left).toBe(BAR_LEFT);
+  });
+
+  test('snaps back when the save rejects', async () => {
+    const onMoveTask = vi.fn().mockRejectedValue(new Error('x'));
+    draw([task()], { onMoveTask });
+
+    grabAndMove(80);
+    release(80);
+    await act(async () => {});
+    expect(bar().style.left).toBe(BAR_LEFT);
+
+    grabAndMove(80);
+    release(80);
+    expect(onMoveTask).toHaveBeenCalledTimes(2);
+  });
+
+  // The reload brings the moved dates; keeping the drop offset on top of them
+  // would draw the bar twice as far as it was dragged.
+  test('holds the dropped position until the reload redraws it', async () => {
+    // Holds rangeStart at Jun 27 once the dragged task has moved off Jul 1.
+    const anchor = task({ name: 'Anchor', index: 1, end: '2026-07-01' });
+    draw([task(), anchor], { onMoveTask: vi.fn().mockResolvedValue(true) });
+
+    grabAndMove(80);
+    release(80);
+    await act(async () => {});
+    expect(bar().style.left).toBe('240px');
+
+    draw([task({ start: '2026-07-03', end: '2026-07-13' }), anchor], { onMoveTask: vi.fn() });
+
+    expect(bar().style.left).toBe('240px');
+  });
+
+  // The dates being dragged may be the very ones the reload changed, and a drop
+  // computed from the old ones would silently overwrite that edit.
+  test('a reload cancels a drag in progress', () => {
+    const onMoveTask = vi.fn().mockResolvedValue(true);
+    draw([task()], { onMoveTask });
+
+    grabAndMove(80);
+    draw([task({ name: 'Renamed' })], { onMoveTask });
+    release(80);
+
+    expect(onMoveTask).not.toHaveBeenCalled();
+  });
+});

@@ -25,7 +25,8 @@
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
-    "sirv": "^3.0.0"
+    "sirv": "^3.0.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@preact/compat": "^17.1.2",

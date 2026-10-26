@@ -2,9 +2,12 @@ import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import {
   addDays,
   computeRange,
+  dragLabel,
+  formatDay,
   hasChartableRange,
   parseDay,
   scrollShiftDays,
+  shiftTask,
   todayOffset,
 } from '../src/timeline';
 import type { Task } from '../src/parseYaml';
@@ -31,6 +34,7 @@ function task(overrides: Partial<Task> = {}): Task {
   return {
     project: 'Product Launch',
     name: 'Market research',
+    index: 0,
     start: '2026-07-01',
     end: '2026-07-11',
     assignees: [],
@@ -260,5 +264,28 @@ describe('hasChartableRange', () => {
 
   test('accepts a roadmap with at least one task', () => {
     expect(hasChartableRange([task()])).toBe(true);
+  });
+});
+
+describe('formatDay', () => {
+  test('formatDay round-trips parseDay', () => {
+    expect(formatDay(parseDay('2026-03-08'))).toBe('2026-03-08');
+  });
+});
+
+describe('shiftTask', () => {
+  // The Nov 1 fall-back makes this span 25 hours longer in ms; shifting by ms
+  // would land on 23:00 of the previous date.
+  test('shiftTask keeps the length across a DST change', () => {
+    expect(shiftTask(task({ start: '2026-10-30', end: '2026-11-02' }), 3))
+      .toEqual({ start: '2026-11-02', end: '2026-11-05' });
+  });
+});
+
+describe('dragLabel', () => {
+  test('dragLabel signs the slip', () => {
+    expect(dragLabel('2026-07-09', '2026-07-17', 3)).toBe('Jul 9 → Jul 17 +3d');
+    expect(dragLabel('2026-07-05', '2026-07-13', -1)).toBe('Jul 5 → Jul 13 -1d');
+    expect(dragLabel('2026-07-06', '2026-07-14', 0)).toBe('Jul 6 → Jul 14 +0d');
   });
 });
