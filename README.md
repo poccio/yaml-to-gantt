@@ -64,7 +64,7 @@ periods:                  # optional: sprints, releases, holidays…
 - **assignees** _(optional)_: people assigned to the task; omit it or pass `[]` for none
 - **description** _(optional)_: surfaces in a hover popover via the trailing "?" marker on the task row. Rendered as raw HTML, so inline tags like `<b>` or `<a>` work (input is trusted — you author your own YAML)
 - **originallyPlannedStart** / **originallyPlannedEnd** _(optional)_: the task's original baseline dates. Set both to render the baseline alongside the actual `start`/`end`, making slippage and delays visible at a glance
-- **periods** _(optional)_: a list of named stretches of the calendar. Each is a labelled chip in a lane under the day numbers and a faint wash down every row. `start`/`end` are inclusive, and periods may not overlap. Back-to-back periods alternate shade so a sprint cadence reads as blocks; a weekend-only gap still counts as back-to-back. The chart widens to include every period
+- **periods** _(optional)_: a list of named stretches of the calendar. Each is a labelled tab in a lane under the day numbers, over a tinted, edged column down every row. `start`/`end` are inclusive, and periods may not overlap. Back-to-back periods alternate between two colours so a sprint cadence reads as blocks; a weekend-only gap still counts as back-to-back. The chart widens to include every period
 
 ## Features
 

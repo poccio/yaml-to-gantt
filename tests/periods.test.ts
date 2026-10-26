@@ -32,19 +32,19 @@ describe('layoutPeriods', () => {
     expect([span.startOff, span.endOff]).toEqual([0, 11]);
   });
 
-  test('alternates tone through back-to-back periods', () => {
+  test('alternates hue through back-to-back periods', () => {
     const spans = layoutPeriods(periods(
       ['S1', '2026-10-26', '2026-11-08'],
       ['S2', '2026-11-09', '2026-11-22'],
       ['S3', '2026-11-23', '2026-12-06'],
     ), monOct26());
 
-    expect(spans.map(s => s.tone)).toEqual(['primary', 'alternate', 'primary']);
+    expect(spans.map(s => s.hue)).toEqual([0, 1, 0]);
     expect(spans.map(s => s.abutsNext)).toEqual([true, true, false]);
   });
 
   // Mon–Fri sprints leave a Sat–Sun gap; treating it as a break made every
-  // sprint primary and the cadence one undivided wash.
+  // sprint the same hue and the cadence one undivided wash.
   test('keeps alternating across a gap of only a weekend', () => {
     const spans = layoutPeriods(periods(
       ['S1', '2026-10-26', '2026-11-06'],
@@ -52,18 +52,18 @@ describe('layoutPeriods', () => {
       ['S3', '2026-11-23', '2026-12-04'],
     ), monOct26());
 
-    expect(spans.map(s => s.tone)).toEqual(['primary', 'alternate', 'primary']);
+    expect(spans.map(s => s.hue)).toEqual([0, 1, 0]);
     expect(spans.map(s => s.abutsNext)).toEqual([false, false, false]);
   });
 
-  test('restarts on primary after a gap that holds a weekday', () => {
+  test('restarts on the first hue after a gap that holds a weekday', () => {
     // Fri Oct 30, then Tue Nov 3: the Monday between breaks the run.
     const spans = layoutPeriods(periods(
       ['A', '2026-10-26', '2026-10-30'],
       ['B', '2026-11-03', '2026-11-06'],
     ), monOct26());
 
-    expect(spans.map(s => s.tone)).toEqual(['primary', 'primary']);
+    expect(spans.map(s => s.hue)).toEqual([0, 0]);
   });
 
   test('returns nothing for no periods', () => {

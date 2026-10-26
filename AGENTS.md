@@ -57,7 +57,7 @@ src/
                     toggle; also EmptyState and Pill
   GanttChart.tsx    Chart renderer, Preact + CSS; also TaskInfoPopover
   timeline.ts       Calendar-day math — parseDay, addDays, daysBetween, computeRange, …
-  periods.ts        Periods on the day grid — offsets, alternating tone, tooltip
+  periods.ts        Periods on the day grid — offsets, alternating hue, tooltip
   chartLayout.ts    Pixel math — BASE_DAY_W, LABEL_W, effectiveDayW, bar/chip/hover
                     geometry
   popover.ts        placePopover

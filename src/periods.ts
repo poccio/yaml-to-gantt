@@ -6,18 +6,17 @@
 import type { Period } from './parseYaml';
 import { addDays, daysBetween, parseDay, shortDay } from './timeline';
 
-/**
- * `alternate` is the lighter wash. Back-to-back periods alternate so a cadence
- * reads as distinct blocks rather than one tint across the whole chart.
- */
-export type PeriodTone = 'primary' | 'alternate';
-
 export interface PeriodSpan {
   period: Period;
   startOff: number;
   /** Inclusive. */
   endOff: number;
-  tone: PeriodTone;
+  /**
+   * Which of the theme's two `periodHues`. Back-to-back periods alternate so a
+   * cadence reads as distinct blocks rather than one tint across the whole
+   * chart; the hues are equally strong, so neither reads as the more important.
+   */
+  hue: 0 | 1;
   /**
    * The next period starts the very next day. Its left edge line
    * is then this one's right edge, and drawing both doubles it into a 2px rule.
@@ -29,7 +28,7 @@ export interface PeriodSpan {
  * Whether two periods belong to one cadence: nothing but weekend days between
  * them. Sprints are as often written Mon–Fri as Mon–Sun, and the first spelling
  * leaves a Sat–Sun gap that must not restart the alternation, or every sprint
- * comes out `primary` and the blocks merge.
+ * comes out hue 0 and the blocks merge.
  */
 function continuesRun(prevEnd: Date, nextStart: Date): boolean {
   const gap = daysBetween(prevEnd, nextStart) - 1;
@@ -48,15 +47,12 @@ export function layoutPeriods(periods: Period[], rangeStart: Date): PeriodSpan[]
     const end = parseDay(period.end);
     const prev = periods[i - 1];
     const next = periods[i + 1];
-    const tone: PeriodTone =
-      prev && spans[i - 1].tone === 'primary' && continuesRun(parseDay(prev.end), start)
-        ? 'alternate'
-        : 'primary';
+    const hue = prev && continuesRun(parseDay(prev.end), start) && spans[i - 1].hue === 0 ? 1 : 0;
     spans.push({
       period,
       startOff: daysBetween(rangeStart, start),
       endOff: daysBetween(rangeStart, end),
-      tone,
+      hue,
       abutsNext: !!next && daysBetween(end, parseDay(next.start)) === 1,
     });
   });

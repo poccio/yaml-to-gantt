@@ -26,16 +26,17 @@ export interface Theme {
   ghostBorder: string;
   ghostFill: string;
   /**
-   * Hex, because every period layer applies it at its own alpha below. Per
-   * theme, unlike `PROJECT_COLORS`: a period is only ever a wash and label text,
-   * and a hue light enough to read as text on dark is illegible on white.
+   * Hex, because the wash and edges apply them at the alphas below; the tab
+   * is solid. Two hues of equal strength alternate through back-to-back
+   * periods (see `PeriodSpan.hue`). Per theme, unlike `PROJECT_COLORS`: each
+   * needs its own strength against a dark or a white surface. Neither is blue,
+   * so a period never reads as the accent's today line or hover column.
    */
-  periodHue: string;
+  periodHues: [string, string];
+  /** The period name, set on the solid tab of either hue. */
+  periodLabel: string;
   periodWash: number;
-  periodWashAlt: number;
   periodEdge: number;
-  periodChip: number;
-  periodChipAlt: number;
   colorScheme: 'dark' | 'light';
 }
 
@@ -50,9 +51,8 @@ export const DARK: Theme = {
   chipBg: 'rgba(255,255,255,0.07)', chipBorder: 'rgba(255,255,255,0.12)',
   chipText: '#7a9ab8', error: '#f87171',
   ghostBorder: 'rgba(190,200,215,0.85)', ghostFill: 'rgba(255,255,255,0.05)',
-  periodHue: '#8b9cf7',
-  periodWash: 0.12, periodWashAlt: 0.05, periodEdge: 0.32,
-  periodChip: 0.24, periodChipAlt: 0.11,
+  periodHues: ['#a78bfa', '#14b8a6'], periodLabel: '#14141f',
+  periodWash: 0.1, periodEdge: 0.7,
   colorScheme: 'dark',
 };
 
@@ -67,8 +67,7 @@ export const LIGHT: Theme = {
   chipBg: 'rgba(0,0,0,0.05)', chipBorder: 'rgba(0,0,0,0.12)',
   chipText: '#4a5978', error: '#f87171',
   ghostBorder: 'rgba(80,90,110,0.8)', ghostFill: 'rgba(0,0,0,0.045)',
-  periodHue: '#5563de',
-  periodWash: 0.06, periodWashAlt: 0.025, periodEdge: 0.3,
-  periodChip: 0.14, periodChipAlt: 0.07,
+  periodHues: ['#7c3aed', '#0f766e'], periodLabel: '#ffffff',
+  periodWash: 0.06, periodEdge: 0.6,
   colorScheme: 'light',
 };

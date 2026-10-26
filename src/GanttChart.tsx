@@ -156,8 +156,7 @@ export default function GanttChart({ tasks, projects: projectNames, periods = NO
   );
 
   const periodSpans = useMemo(() => layoutPeriods(periods, rangeStart), [periods, rangeStart]);
-  const periodRgb = hexRgb(theme.periodHue);
-  const periodEdge = `1px solid rgba(${periodRgb},${theme.periodEdge})`;
+  const periodRgbs = theme.periodHues.map(hexRgb);
   // Zero without periods, so the header is exactly what it was before they existed.
   const laneH = periodSpans.length > 0 ? PERIOD_LANE_H : 0;
 
@@ -594,25 +593,28 @@ export default function GanttChart({ tasks, projects: projectNames, periods = NO
               position: 'relative', height: laneH, boxSizing: 'border-box',
               borderTop: `1px solid ${theme.borderInner}`,
             }}>
-              {periodSpans.map(span => (
+              {periodSpans.map((span, i) => (
                 <div
                   key={span.period.start}
                   data-period={span.period.name}
                   title={periodTitle(span.period)}
                   style={{
                     position: 'absolute',
-                    // Inset a pixel each side, so back-to-back periods stay
-                    // two chips instead of fusing into one bar.
-                    left: span.startOff * dayW + 1,
-                    width: (span.endOff - span.startOff + 1) * dayW - 2,
-                    top: 3, height: PERIOD_LANE_H - 7,
-                    boxSizing: 'border-box',
-                    borderRadius: 4,
-                    background: `rgba(${periodRgb},${span.tone === 'primary' ? theme.periodChip : theme.periodChipAlt})`,
-                    // The start flag: which edge opens the period, at any width.
-                    boxShadow: `inset 2px 0 0 ${theme.periodHue}`,
+                    // The wash's exact columns, so the tab and the edge lines
+                    // below meet as one column.
+                    left: span.startOff * dayW,
+                    width: (span.endOff - span.startOff + 1) * dayW,
+                    // The header's bottom border is drawn inside its height, so
+                    // the lane's last pixel lies on it, past where the sticky
+                    // label column covers a tab scrolled under it.
+                    top: 4, bottom: 1,
+                    // Abutting tabs meet in a square seam, on the one edge line
+                    // the wash draws there. Abutting periods always differ in
+                    // hue, so the colour change is what separates them.
+                    borderRadius: `${periodSpans[i - 1]?.abutsNext ? 0 : 4}px ${span.abutsNext ? 0 : 4}px 0 0`,
+                    background: theme.periodHues[span.hue],
                     display: 'flex', alignItems: 'center',
-                    padding: '0 4px 0 8px',
+                    padding: '0 6px',
                   }}
                 >
                   {/* Sticky, so a period that began off to the left still
@@ -622,7 +624,7 @@ export default function GanttChart({ tasks, projects: projectNames, periods = NO
                     position: 'sticky', left: LABEL_W + 8,
                     minWidth: 0,
                     fontSize: 12, fontWeight: 600, lineHeight: 1,
-                    color: theme.periodHue,
+                    color: theme.periodLabel,
                     fontFamily: "'JetBrains Mono', monospace",
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
@@ -867,17 +869,21 @@ export default function GanttChart({ tasks, projects: projectNames, periods = NO
             left: LABEL_W, width: totalDays * dayW,
             zIndex: 0, pointerEvents: 'none',
           }}>
-            {periodSpans.map(span => (
-              <div key={span.period.start} style={{
-                position: 'absolute', top: 0, bottom: 0,
-                left: span.startOff * dayW,
-                width: (span.endOff - span.startOff + 1) * dayW,
-                boxSizing: 'border-box',
-                background: `rgba(${periodRgb},${span.tone === 'primary' ? theme.periodWash : theme.periodWashAlt})`,
-                borderLeft: periodEdge,
-                borderRight: span.abutsNext ? 'none' : periodEdge,
-              }} />
-            ))}
+            {periodSpans.map(span => {
+              const rgb = periodRgbs[span.hue];
+              const edge = `1px solid rgba(${rgb},${theme.periodEdge})`;
+              return (
+                <div key={span.period.start} style={{
+                  position: 'absolute', top: 0, bottom: 0,
+                  left: span.startOff * dayW,
+                  width: (span.endOff - span.startOff + 1) * dayW,
+                  boxSizing: 'border-box',
+                  background: `rgba(${rgb},${theme.periodWash})`,
+                  borderLeft: edge,
+                  borderRight: span.abutsNext ? 'none' : edge,
+                }} />
+              );
+            })}
           </div>
         )}
 
