@@ -14,12 +14,15 @@
 #   roadmap.yaml   roadmap to render (default: assets/gif/roadmap.yaml)
 #   TASK=<name>    task whose popover to open in the screenshot, '' to skip
 #                  (default: Design)
+#   TODAY=<date>   the day the chart treats as today, YYYY-MM-DD (default:
+#                  2026-06-04, inside roadmap.yaml's dates)
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROADMAP="${1:-$HERE/roadmap.yaml}"
 TASK="${TASK:-Design}"
+TODAY="${TODAY:-2026-06-04}"
 
 TERMINAL_GIF="$HERE/terminal/terminal.gif"
 SCREENSHOT="$HERE/screenshot/screenshot-dark.png"
@@ -36,7 +39,7 @@ BROWSER_DURATION=10
 bash "$HERE/terminal/generate-gif.sh" "$ROADMAP"
 
 # 2) Render the screenshot half (builds the app, screenshots the chart).
-TASK="$TASK" bash "$HERE/screenshot/generate-screenshot.sh" "$ROADMAP"
+TASK="$TASK" TODAY="$TODAY" bash "$HERE/screenshot/generate-screenshot.sh" "$ROADMAP"
 
 # 3) Crossfade terminal recording into the screenshot -> demo.gif.
 STAGE="$(mktemp -d "$HOME/.y2g-gif.XXXXXX")"

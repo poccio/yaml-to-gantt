@@ -1,15 +1,17 @@
 import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/compat';
 import type { JSX } from 'preact';
-import type { Task } from './parseYaml';
+import type { Period, Task } from './parseYaml';
 import type { Theme } from './themes';
 import { addDays, computeRange, daysBetween, dragLabel, parseDay, scrollShiftDays, shiftTask, todayOffset } from './timeline';
 import { CARET_HALF_EDGE, POPOVER_W, placePopover } from './popover';
 import type { PopoverPos } from './popover';
+import { layoutPeriods, periodTitle } from './periods';
 import { BASE_DAY_W, GHOST_BORDER_W, LABEL_W, chipX, dragShiftDays, effectiveDayW, hoverOffsetAt, hoverPillCenter, hoverPillW, isBehindLabelColumn, rowMinW, taskBarGeometry, timelineMinW, todayFocusScrollLeft } from './chartLayout';
 
 const ROW_H = 52;
 const PROJ_H = 54;
 const HDR_H = 68;
+const PERIOD_LANE_H = 24;
 const TODAY_GLOW_BLUR = 14;
 const POPOVER_OPEN_DELAY = 350;
 const POPOVER_CLOSE_DELAY = 140;
@@ -20,6 +22,10 @@ const PROJECT_COLORS = [
 ];
 
 const ACCENT = '#4f8ef7';
+
+// One shared empty list, so leaving `periods` out does not hand the memos below
+// a new dependency every render.
+const NO_PERIODS: Period[] = [];
 
 function hexRgb(hex: string): string {
   return [
@@ -69,6 +75,8 @@ interface GanttChartProps {
   tasks: Task[];
   /** Declaration order, empty projects included — see `Roadmap.projects`. */
   projects: string[];
+  /** Sorted by start — see `Roadmap.periods`. */
+  periods?: Period[];
   selectedAssignees: Set<string> | null;
   hideEmptyProjects: boolean;
   theme: Theme;
@@ -80,7 +88,7 @@ interface GanttChartProps {
   onMoveTask?: (task: Task, start: string, end: string) => Promise<boolean>;
 }
 
-export default function GanttChart({ tasks, projects: projectNames, selectedAssignees, hideEmptyProjects, theme, onMoveTask }: GanttChartProps) {
+export default function GanttChart({ tasks, projects: projectNames, periods = NO_PERIODS, selectedAssignees, hideEmptyProjects, theme, onMoveTask }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverOffset, setHoverOffset] = useState<number | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
@@ -143,9 +151,15 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
   ), [projectNames]);
 
   const { rangeStart, totalDays, months, firstMondayOffset } = useMemo(
-    () => computeRange(tasks),
-    [tasks]
+    () => computeRange(tasks, periods),
+    [tasks, periods]
   );
+
+  const periodSpans = useMemo(() => layoutPeriods(periods, rangeStart), [periods, rangeStart]);
+  const periodRgb = hexRgb(theme.periodHue);
+  const periodEdge = `1px solid rgba(${periodRgb},${theme.periodEdge})`;
+  // Zero without periods, so the header is exactly what it was before they existed.
+  const laneH = periodSpans.length > 0 ? PERIOD_LANE_H : 0;
 
   const dayTicks = useMemo((): DayTick[] => {
     const ticks: DayTick[] = [];
@@ -432,7 +446,7 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
       onScroll={() => { setOpenTask(null); syncScrollLeft(); syncHover(); }}
     >
 
-      <div style={rowShell(HDR_H, {
+      <div style={rowShell(HDR_H + laneH, {
         position: 'sticky', top: 0, zIndex: 30,
         background: `linear-gradient(180deg, ${theme.headerBg} 0%, ${theme.surface} 100%)`,
         borderBottom: `1px solid ${theme.border}`,
@@ -444,9 +458,14 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
           zIndex: 31,
           background: `linear-gradient(180deg, ${theme.headerBg} 0%, ${theme.surface} 100%)`,
           borderRight: `1px solid ${theme.border}`,
-          display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
-          padding: '0 10px 8px',
+          display: 'flex', flexDirection: 'column',
+          padding: '0 10px',
         }}>
+          <div style={{
+            height: HDR_H, flexShrink: 0, boxSizing: 'border-box',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+            paddingBottom: 8,
+          }}>
           <button
             data-focus-today
             onClick={focusToday}
@@ -476,6 +495,20 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
           >
             Today
           </button>
+          </div>
+
+          {laneH > 0 && (
+            <div style={{
+              height: laneH, boxSizing: 'border-box',
+              borderTop: `1px solid ${theme.borderInner}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+              fontSize: 11, fontWeight: 600, letterSpacing: '0.1em',
+              textTransform: 'uppercase', color: theme.textMuted,
+              fontFamily: "'JetBrains Mono', monospace",
+            }}>
+              Periods
+            </div>
+          )}
         </div>
 
         <div style={tlCell()}>
@@ -517,7 +550,8 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
               <div style={{
                 position: 'absolute',
                 left: hoverOffset * dayW, top: 0,
-                width: dayW, height: 38,
+                // Down through the period lane, so the column reads as one.
+                width: dayW, height: 38 + laneH,
                 background: 'rgba(79,142,247,0.08)',
                 borderRadius: 2, zIndex: 2, pointerEvents: 'none',
               }} />
@@ -542,7 +576,7 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
               </div>
             )}
 
-            <TodayLine height={38} />
+            <TodayLine height={38 + laneH} />
             {todayX !== null && (
               <div data-today="header" style={{
                 position: 'absolute',
@@ -554,6 +588,50 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
               }} />
             )}
           </div>
+
+          {laneH > 0 && (
+            <div style={{
+              position: 'relative', height: laneH, boxSizing: 'border-box',
+              borderTop: `1px solid ${theme.borderInner}`,
+            }}>
+              {periodSpans.map(span => (
+                <div
+                  key={span.period.start}
+                  data-period={span.period.name}
+                  title={periodTitle(span.period)}
+                  style={{
+                    position: 'absolute',
+                    // Inset a pixel each side, so back-to-back periods stay
+                    // two chips instead of fusing into one bar.
+                    left: span.startOff * dayW + 1,
+                    width: (span.endOff - span.startOff + 1) * dayW - 2,
+                    top: 3, height: PERIOD_LANE_H - 7,
+                    boxSizing: 'border-box',
+                    borderRadius: 4,
+                    background: `rgba(${periodRgb},${span.tone === 'primary' ? theme.periodChip : theme.periodChipAlt})`,
+                    // The start flag: which edge opens the period, at any width.
+                    boxShadow: `inset 2px 0 0 ${theme.periodHue}`,
+                    display: 'flex', alignItems: 'center',
+                    padding: '0 4px 0 8px',
+                  }}
+                >
+                  {/* Sticky, so a period that began off to the left still
+                      names itself at the label column's edge. Nothing up to
+                      the scroller may clip, or sticky binds to that instead. */}
+                  <span style={{
+                    position: 'sticky', left: LABEL_W + 8,
+                    minWidth: 0,
+                    fontSize: 12, fontWeight: 600, lineHeight: 1,
+                    color: theme.periodHue,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {span.period.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -780,6 +858,28 @@ export default function GanttChart({ tasks, projects: projectNames, selectedAssi
           </div>
         );
       })}
+
+        {/* A wash per period across every row. Under the bars and the crosshair,
+            over the weekend fill, so a weekend inside a sprint reads as both. */}
+        {periodSpans.length > 0 && (
+          <div data-periods style={{
+            position: 'absolute', top: 0, bottom: 0,
+            left: LABEL_W, width: totalDays * dayW,
+            zIndex: 0, pointerEvents: 'none',
+          }}>
+            {periodSpans.map(span => (
+              <div key={span.period.start} style={{
+                position: 'absolute', top: 0, bottom: 0,
+                left: span.startOff * dayW,
+                width: (span.endOff - span.startOff + 1) * dayW,
+                boxSizing: 'border-box',
+                background: `rgba(${periodRgb},${span.tone === 'primary' ? theme.periodWash : theme.periodWashAlt})`,
+                borderLeft: periodEdge,
+                borderRight: span.abutsNext ? 'none' : periodEdge,
+              }} />
+            ))}
+          </div>
+        )}
 
         {todayX !== null && (
           <div data-today="bar" style={{

@@ -66,9 +66,9 @@ export function hoverOffsetAt({
   dayW: number;
   totalDays: number;
 }): number | null {
-  const xInTimeline = clientX - containerLeft - LABEL_W + scrollLeft;
-  if (xInTimeline < 0) return null;
-  const offset = Math.floor(xInTimeline / dayW);
+  const xPastLabels = clientX - containerLeft - LABEL_W;
+  if (xPastLabels < 0) return null;
+  const offset = Math.floor((xPastLabels + scrollLeft) / dayW);
   return offset >= 0 && offset < totalDays ? offset : null;
 }
 

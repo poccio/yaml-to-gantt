@@ -12,12 +12,15 @@
 #
 #   roadmap.yaml   roadmap to render (default: ../roadmap.yaml)
 #   TASK=<name>    task whose popover to open; '' to skip (default: Design)
+#   TODAY=<date>   the day the chart treats as today, YYYY-MM-DD
+#                  (default: 2026-06-04)
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROADMAP="${1:-$HERE/../roadmap.yaml}"
 TASK="${TASK:-Design}"
+TODAY="${TODAY:-2026-06-04}"
 OUT="$HERE/screenshot-dark.png"
 
 if [ ! -f "$ROADMAP" ]; then
@@ -29,6 +32,6 @@ fi
 
 node "$HERE/generate-screenshot.mjs" \
   --yaml "$ROADMAP" --out "$OUT" --theme dark \
-  --task "$TASK" --display roadmap.yaml
+  --task "$TASK" --today "$TODAY" --display roadmap.yaml
 
 echo "Wrote $OUT"

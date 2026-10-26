@@ -9,14 +9,14 @@
 //   pnpm exec playwright install chromium
 //
 // Flags, all optional, defaults just below: --yaml --out --theme --task
-// --display --width --height --scale. Paths resolve relative to this file.
+// --today --display --width --height --scale. Paths resolve relative to this file.
 // --display sets the toolbar label independently of --yaml, so the frame reads
 // "roadmap.yaml" whatever path was actually rendered. --scale is 2 for
 // crispness; ffmpeg scales back down to 1280x720.
 
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { start } from '../../../server/index.js';
+import { start } from '../../../dist-server/server/index.js';
 
 let chromium;
 try {
@@ -41,13 +41,16 @@ const YAML = path.resolve(__dirname, args.yaml ?? '../roadmap.yaml');
 const OUT = path.resolve(__dirname, args.out ?? 'screenshot-dark.png');
 const THEME = args.theme === 'light' ? 'light' : 'dark';
 const TASK = 'task' in args ? args.task : 'Design';
+// The chart opens scrolled to today, so a real clock past the roadmap's dates
+// scrolls its start out of frame. Noon keeps the day the same in any timezone.
+const TODAY = new Date(`${args.today ?? '2026-06-04'}T12:00:00`);
 const DISPLAY = args.display ?? 'roadmap.yaml';
 const WIDTH = Number(args.width ?? 1280);
 const HEIGHT = Number(args.height ?? 720);
 const SCALE = Number(args.scale ?? 2);
 
 const server = await start(YAML, { port: 0 }); // port 0 → OS-assigned free port
-const base = `http://localhost:${server.address().port}`;
+const base = `http://127.0.0.1:${server.address().port}`;
 
 const browser = await chromium.launch();
 try {
@@ -56,6 +59,7 @@ try {
     deviceScaleFactor: SCALE,
     colorScheme: THEME,
   });
+  await page.clock.setFixedTime(TODAY);
 
   await page.goto(`${base}?file=${encodeURIComponent(DISPLAY)}`);
 

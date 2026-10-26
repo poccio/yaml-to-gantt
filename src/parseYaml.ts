@@ -29,6 +29,15 @@ interface YamlTaskItem {
 interface YamlDocument {
   /** A project written as `Name:` with nothing under it arrives as null. */
   projects: Record<string, YamlTaskItem[] | null>;
+  periods?: unknown;
+}
+
+/** A named stretch of the calendar drawn under the tasks: a sprint, a freeze, a holiday. */
+export interface Period {
+  name: string;
+  start: string;
+  /** Inclusive, like a task's. */
+  end: string;
 }
 
 export interface Roadmap {
@@ -38,6 +47,8 @@ export interface Roadmap {
    * `tasks` alone cannot tell an empty project from one that was never written.
    */
   projects: string[];
+  /** Sorted by start, whatever order the file lists them in. */
+  periods: Period[];
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -62,6 +73,44 @@ function toDateStr(val: string | Date, field: string, where: string): string {
     throw new Error(`${where}: ${field} must be a YYYY-MM-DD date, got "${s}"`);
   }
   return s;
+}
+
+function isPlainMap(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v) && !(v instanceof Date);
+}
+
+/**
+ * Held to the same date rules as tasks, since a period's dates feed
+ * `computeRange` too, plus two a task gets away with: an end before its start,
+ * and two periods sharing a day. Periods share one header lane, so an overlap
+ * there has no place to be drawn.
+ */
+function parsePeriods(raw: unknown): Period[] {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error('periods must be a list of periods, each with name, start and end');
+  }
+  const periods = raw.map((item: unknown, i): Period => {
+    if (!isPlainMap(item)) throw new Error(`periods #${i + 1}: must be a map with name, start and end`);
+    if (item.name == null || String(item.name).trim() === '') {
+      throw new Error(`periods #${i + 1}: name is required`);
+    }
+    const name = String(item.name);
+    const where = `periods / ${name}`;
+    const start = toDateStr(item.start as string | Date, 'start', where);
+    const end = toDateStr(item.end as string | Date, 'end', where);
+    // Zero-padded YYYY-MM-DD orders the same as the dates it names.
+    if (end < start) throw new Error(`${where}: end ${end} is before start ${start}`);
+    return { name, start, end };
+  });
+  periods.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+  for (let i = 1; i < periods.length; i++) {
+    const [prev, next] = [periods[i - 1], periods[i]];
+    if (next.start <= prev.end) {
+      throw new Error(`periods: "${prev.name}" and "${next.name}" overlap — periods cannot share a day`);
+    }
+  }
+  return periods;
 }
 
 export function parseYaml(text: string): Roadmap {
@@ -89,5 +138,5 @@ export function parseYaml(text: string): Roadmap {
       });
     }
   }
-  return { tasks, projects: Object.keys(doc.projects) };
+  return { tasks, projects: Object.keys(doc.projects), periods: parsePeriods(doc.periods) };
 }

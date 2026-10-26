@@ -306,3 +306,103 @@ projects:
     expect(parseYaml('projects: {}').projects).toEqual([]);
   });
 });
+
+describe('parseYaml periods', () => {
+  const withPeriods = (periods: string) => `
+projects:
+  Solo:
+    - name: T
+      start: 2026-04-01
+      end: 2026-04-05
+${periods}`;
+
+  it('returns no periods when the key is absent', () => {
+    expect(parseYaml(SINGLE_PROJECT_YAML).periods).toEqual([]);
+  });
+
+  it('returns no periods for a key with nothing under it', () => {
+    expect(parseYaml(withPeriods('periods:')).periods).toEqual([]);
+  });
+
+  it('reads name and dates, quoted or not', () => {
+    const { periods } = parseYaml(withPeriods(`
+periods:
+  - name: Sprint 1
+    start: 2026-04-06
+    end: "2026-04-17"
+`));
+    expect(periods).toEqual([{ name: 'Sprint 1', start: '2026-04-06', end: '2026-04-17' }]);
+  });
+
+  it('sorts by start date, whatever order the file lists them in', () => {
+    const { periods } = parseYaml(withPeriods(`
+periods:
+  - name: Sprint 2
+    start: 2026-04-20
+    end: 2026-05-01
+  - name: Sprint 1
+    start: 2026-04-06
+    end: 2026-04-17
+`));
+    expect(periods.map(p => p.name)).toEqual(['Sprint 1', 'Sprint 2']);
+  });
+
+  it('accepts a one-day period', () => {
+    const { periods } = parseYaml(withPeriods(`
+periods:
+  - name: GA
+    start: 2026-04-20
+    end: 2026-04-20
+`));
+    expect(periods).toEqual([{ name: 'GA', start: '2026-04-20', end: '2026-04-20' }]);
+  });
+
+  it('rejects anything but a list, naming the shape it wants', () => {
+    expect(() => parseYaml(withPeriods(`
+periods:
+  Sprint 1:
+    start: 2026-04-06
+    end: 2026-04-17
+`))).toThrow('periods must be a list of periods, each with name, start and end');
+  });
+
+  it('rejects a period with no name, by its position', () => {
+    expect(() => parseYaml(withPeriods(`
+periods:
+  - start: 2026-04-06
+    end: 2026-04-17
+`))).toThrow('periods #1: name is required');
+  });
+
+  // Same failure as a task's: an Invalid Date here would blank the whole chart
+  // through computeRange.
+  it('rejects a bad date, naming the period', () => {
+    expect(() => parseYaml(withPeriods(`
+periods:
+  - name: Sprint 1
+    start: 2026-04-06
+    end: "2026-02-30"
+`))).toThrow('periods / Sprint 1: end must be a YYYY-MM-DD date, got "2026-02-30"');
+  });
+
+  it('rejects an end before its start', () => {
+    expect(() => parseYaml(withPeriods(`
+periods:
+  - name: Sprint 1
+    start: 2026-04-17
+    end: 2026-04-06
+`))).toThrow('periods / Sprint 1: end 2026-04-06 is before start 2026-04-17');
+  });
+
+  it('rejects two periods sharing a day', () => {
+    expect(() => parseYaml(withPeriods(`
+periods:
+  - name: Sprint 1
+    start: 2026-04-06
+    end: 2026-04-17
+  - name: Code freeze
+    start: 2026-04-17
+    end: 2026-04-21
+`))).toThrow('periods: "Sprint 1" and "Code freeze" overlap — periods cannot share a day');
+  });
+});

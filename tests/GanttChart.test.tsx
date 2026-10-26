@@ -4,7 +4,7 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import GanttChart from '../src/GanttChart';
 import { DARK } from '../src/themes';
-import type { Task } from '../src/parseYaml';
+import type { Period, Task } from '../src/parseYaml';
 
 // Pinned for the same reason tests/timeline.test.ts pins it: a UTC-only run
 // cannot catch a local-vs-UTC mix-up in the day grid these offsets sit on.
@@ -110,6 +110,7 @@ interface DrawOpts {
   selectedAssignees?: Set<string> | null;
   hideEmptyProjects?: boolean;
   onMoveTask?: (task: Task, start: string, end: string) => Promise<boolean>;
+  periods?: Period[];
 }
 
 function draw(tasks: Task[], opts: DrawOpts = {}) {
@@ -118,6 +119,7 @@ function draw(tasks: Task[], opts: DrawOpts = {}) {
       <GanttChart
         tasks={tasks}
         projects={opts.projects ?? [...new Set(tasks.map(t => t.project))]}
+        periods={opts.periods}
         selectedAssignees={opts.selectedAssignees ?? null}
         hideEmptyProjects={opts.hideEmptyProjects ?? false}
         theme={DARK}
@@ -713,5 +715,40 @@ describe('dragging a bar', () => {
     release(80);
 
     expect(onMoveTask).not.toHaveBeenCalled();
+  });
+});
+
+describe('periods', () => {
+  const SPRINTS: Period[] = [
+    { name: 'Sprint 1', start: '2026-06-29', end: '2026-07-03' },
+    { name: 'Sprint 2', start: '2026-07-06', end: '2026-07-17' },
+  ];
+
+  function chips(): HTMLElement[] {
+    return [...scroller().querySelectorAll('[data-period]')] as HTMLElement[];
+  }
+
+  test('draws a header chip and a row wash for every period', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([task()], { periods: SPRINTS });
+
+      expect(chips().map(c => c.textContent)).toEqual(['Sprint 1', 'Sprint 2']);
+      expect(scroller().querySelector('[data-periods]')!.children).toHaveLength(2);
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  test('draws neither without periods', () => {
+    const stubs = installLayoutStubs(1182);
+    try {
+      draw([task()]);
+
+      expect(chips()).toHaveLength(0);
+      expect(scroller().querySelector('[data-periods]')).toBeNull();
+    } finally {
+      stubs.restore();
+    }
   });
 });

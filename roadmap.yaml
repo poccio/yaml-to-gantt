@@ -33,3 +33,8 @@ projects:
       assignees:
         - Carol
         - Dave
+
+periods:
+  - name: Sprint 1
+    start: 2025-07-07
+    end: 2025-07-18

@@ -310,6 +310,7 @@ export default function App() {
             : <GanttChart
                 tasks={roadmap.tasks}
                 projects={roadmap.projects}
+                periods={roadmap.periods}
                 selectedAssignees={selectedAssignees}
                 hideEmptyProjects={hideEmptyProjects}
                 theme={theme}

@@ -95,6 +95,20 @@ describe('computeRange', () => {
     expect(withoutBaseline.rangeStart.getTime()).toBe(new Date(2026, 6, 6).getTime());
   });
 
+  // A period is somewhere a task can be dragged to, and a drag cannot leave the grid.
+  test('extends the range to cover periods on either side of the tasks', () => {
+    const periods = [
+      { name: 'Sprint 0', start: '2026-06-15', end: '2026-06-26' },
+      { name: 'Sprint 3', start: '2026-07-27', end: '2026-08-07' },
+    ];
+
+    const { rangeStart, totalDays } = computeRange([task()], periods);
+
+    // Jun 15 − 4 = Thu Jun 11; Aug 7 + 6 = Thu Aug 13; inclusive.
+    expect(rangeStart.getTime()).toBe(new Date(2026, 5, 11).getTime());
+    expect(totalDays).toBe(64);
+  });
+
   // Mar 8 2026 is a 23-hour day in New York, Nov 1 a 25-hour one. Truncating
   // elapsed-millisecond arithmetic comes up a day short across the spring
   // transition: the March cell reports 20 days instead of 21. Month widths are

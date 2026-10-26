@@ -21,6 +21,14 @@ projects:
       originallyPlannedEnd: 2025-07-18
       assignees: [Bob, Carol]
   Discovery: []                                    # a project may have no tasks
+
+periods:                                           # optional
+  - name: Sprint 42
+    start: 2025-07-07
+    end: 2025-07-18                                # inclusive
+  - name: Release week
+    start: 2025-07-21
+    end: 2025-07-25
 ```
 
 `src/parseYaml.ts` flattens this into a `Roadmap` — `Task[]` plus the project
@@ -31,7 +39,8 @@ Keep the two halves aligned: `GanttChart` hands out colours by position in that
 list, so a project dropped from it recolours every project after it. Keep
 that validation: one Invalid Date poisons the min/max in `computeRange` and
 silently blanks the *whole* chart, not just the bad row. `description` is raw
-HTML — input is trusted.
+HTML — input is trusted. Periods get the same date validation, plus the rules
+in `parsePeriods`' docstring.
 
 ## Architecture
 
@@ -48,6 +57,7 @@ src/
                     toggle; also EmptyState and Pill
   GanttChart.tsx    Chart renderer, Preact + CSS; also TaskInfoPopover
   timeline.ts       Calendar-day math — parseDay, addDays, daysBetween, computeRange, …
+  periods.ts        Periods on the day grid — offsets, alternating tone, tooltip
   chartLayout.ts    Pixel math — BASE_DAY_W, LABEL_W, effectiveDayW, bar/chip/hover
                     geometry
   popover.ts        placePopover

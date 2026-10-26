@@ -81,6 +81,14 @@ describe('hoverOffsetAt', () => {
     })).toBeNull();
   });
 
+  // The label column stays put while the grid scrolls, so adding scrollLeft
+  // before this check turned the label column into whatever days sat under it.
+  test('reports no day over the label column when scrolled', () => {
+    expect(hoverOffsetAt({
+      clientX: 200, containerLeft: 100, scrollLeft: 800, dayW: 40, totalDays: 40,
+    })).toBeNull();
+  });
+
   // The timeline cell is `flex: 1`, so it can be wider than totalDays of grid.
   test('reports no day past the end of the grid', () => {
     expect(hoverOffsetAt({

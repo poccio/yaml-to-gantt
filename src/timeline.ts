@@ -1,4 +1,4 @@
-import type { Task } from './parseYaml';
+import type { Period, Task } from './parseYaml';
 
 // Blank days of context on either side, so the first and last bars are not
 // flush against the edge of the grid.
@@ -58,14 +58,19 @@ export function daysBetween(a: Date, b: Date): number {
 /**
  * The day grid the chart is drawn on. Assumes at least one task — see
  * `hasChartableRange`.
+ *
+ * Periods widen the grid as well as tasks. The grid is also the space a drag can
+ * reach (`dragShiftDays` clamps to it), so a next sprint left off it would be the
+ * one place a task could not be planned into.
  */
-export function computeRange(tasks: Task[]): TimelineRange {
+export function computeRange(tasks: Task[], periods: Period[] = []): TimelineRange {
   const allDates = tasks.flatMap(t => {
     const ds = [parseDay(t.start), parseDay(t.end)];
     if (t.originallyPlannedStart) ds.push(parseDay(t.originallyPlannedStart));
     if (t.originallyPlannedEnd) ds.push(parseDay(t.originallyPlannedEnd));
     return ds;
   });
+  for (const p of periods) allDates.push(parseDay(p.start), parseDay(p.end));
   const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
   const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
 
@@ -143,9 +148,12 @@ export function shiftTask(task: Task, days: number): { start: string; end: strin
   };
 }
 
+/** `YYYY-MM-DD` as the chart's labels print a day, e.g. `Jul 9`. */
+export function shortDay(s: string): string {
+  return parseDay(s).toLocaleString('en-US', { month: 'short', day: 'numeric' });
+}
+
 /** The floating label shown while dragging, e.g. `Jul 9 → Jul 17 +3d`. */
 export function dragLabel(start: string, end: string, shift: number): string {
-  const short = (s: string) =>
-    parseDay(s).toLocaleString('en-US', { month: 'short', day: 'numeric' });
-  return `${short(start)} → ${short(end)} ${shift < 0 ? '-' : '+'}${Math.abs(shift)}d`;
+  return `${shortDay(start)} → ${shortDay(end)} ${shift < 0 ? '-' : '+'}${Math.abs(shift)}d`;
 }
